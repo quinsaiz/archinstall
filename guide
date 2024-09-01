@@ -1,0 +1,145 @@
+timedatectl set-ntp true
+
+cfdisk /dev/nvme0n1
+mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
+mkfs.f2fs -f -l "home" /dev/nvme0n1p3
+mkfs.vfat /dev/nvme0n1p1
+
+mount -t f2fs /dev/nume0n1p2 /mnt
+mkdir -p /mnt/home
+mount -t f2fs /dev/nume0n1p3 /mnt/home
+mkdir -p /mnt/boot/efi
+mount /dev/nume0n1p1 /mnt/boot/efi
+
+pacstrap -i /mnt base base-devel linux-zen linux-zen-headers linux-firmware intel-ucode iucode-tool f2fs-tools e2fsprogs nano
+
+genfstab -U /mnt >> /mnt/etc/fstab
+
+arch-chroot /mnt
+
+ln -sf /usr/share/zoneinfo/Region/City /etc/localtime
+hwclock --systohc
+
+nano /etc/locale.gen
+locale-gen
+
+nano /etc/locale.conf -> LANG=uk_UA.UTF-8
+ or echo "LANG=uk_UA.UTF-8" | sudo tee /etc/locale.conf
+ 
+nano /etc/vconsole.conf -> KEYMAP=ua-utf
+			   FONT=UniCyr_8x16
+ or echo -e "KEYMAP=ua-utf\nFONT=UniCyr_8x16" | sudo tee /etc/vconsole.conf
+
+nano /etc/hostname -> arch
+ or echo "arch" | sudo tee /etc/hostname
+
+nano /etc/hosts -> 127.0.0.1	localhost
+		   ::1		localhost
+		   127.0.1.1	arch.localdomain arch
+
+mkinitcpio -P
+passwd
+pacman -S grub efibootmgr dhcpcd dhclient networkmanager
+grub-install /dev/nvme0n1
+grub-mkconfig -o /boot/grub/grub.cfg
+exit
+umount -R /mnt
+reboot
+
+nano /etc/sudoers
+useradd -m -G wheel -s /bin/bash quinsaiz
+passwd quinsaiz
+systemctl enable NetworkManager
+reboot
+
+sudo nano /etc/pacman.conf -> multilib and parraleldownloads
+sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
+sudo pacman -S network-manager-applet
+reboot
+
+sudo pacman -S gnome gdm
+sudo systemctl enable gdm
+reboot
+
+{ Apps }
+sudo pacman -Syu firefox firefox-i18n-uk qbittorrent neofetch btop gnome-browser-connector gnome-tweaks bash-completion
+
+{ Interface }
+sudo pacman -S adw-gtk-theme OR adw-gtk-theme-git (AUR) + Suru Plus Icons (AUR)
+
+{ Swapfile }
+sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
+  or sudo nano /etc/fstab -> /swapfile none swap defaults 0 0
+sudo nano /etc/sysctl.d/99-sysctl.conf -> vm.swappiness=10
+					  vm.vfs_cache_pressure=50
+					  
+{ Video Driver mesa amdgpu }
+sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
+
+{ Headphones }
+alsamixer
+cd ~/.config/autostart/
+gnome-text-editor amixer.sh -> (#!/bin/bash
+				amixer -c 0 sset "Headphone" 100% unmute
+				amixer -c 1 sset "Headphone" 100% unmute)
+chmod +x amixer.sh
+
+{ Pipewire }
+sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects
+sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2
+ (!) https://github.com/p-chan5/EasyPulse <- easyeffect presets COPY to ~/.config/easyeffects/output
+
+{ Fonts }
+sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family + ttf-ms-win11-auto(AUR)
+
+{ Firewall }
+sudo pacman -S ufw
+sudo systemctl enable ufw
+sudo systemctl start ufw
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+ (!) optional(sudo ufw allow ssh; sudo ufw allow http; sudo ufw allow https)
+sudo ufw enable
+sudo pacman -S gufw
+
+{ Paru + Pamac }
+sudo pacman -S git
+git clone https://aur.archlinux.org/paru-bin.git
+cd paru-bin
+makepkg -sricCf
+paru -Syu pamac-aur
+
+{ Зміна гучності }
+gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
+
+{ Зміна розкладки }
+gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
+gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
+
+{ PowerProfiles }
+sudo pacman -S power-profiles-daemon
+sudo systemctl enable power-profiles-daemon
+sudo systemctl start power-profiles-daemon
+
+{ Ігри }
+First install vkbasalt if needed on AUR
+sudo pacman -S gamemode lib32-gamemode vkbasalt mangohud lib32-mangohud goverlay
+sudo usermod -aG gamemode $(whoami)
+sudo systemctl enable gamemoded
+sudo systemctl start gamemoded
+
+{ zsh }
+sudo pacman -Sy zsh zsh-completions ttf-firacode-nerd
+sudo chsh -s /bin/zsh 
+sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+git clone https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
+sudo nano ~/.zshrc -> ZSH_THEME="powerlevel10k/powerlevel10k"
+ auto or manual on terminal -> p10k configure
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+sudo nano ~/.zshrc -> plugins=( git zsh-syntax-highlighting zsh-autosuggestions )
+nano ~/.nanorc -> include /usr/share/nano/*.nanorc

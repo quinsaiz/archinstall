@@ -203,7 +203,7 @@ arch-chroot /mnt pacman -S --noconfirm dosfstools ntfs-3g nano git btop neofetch
 echo "Programs install v2..."
 arch-chroot /mnt pacman -S firefox firefox-i18n-uk qbittorrent btop gnome-browser-connector gnome-tweaks ufw gufw
 echo "Audio install..."
-arch-chroot /mnt pacman -S --noconfirm alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects 
+arch-chroot /mnt pacman -S --noconfirm alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2
 echo "Fonts install..."
 arch-chroot /mnt pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-firacode-nerd ttf-ubuntu-font-family 
 echo "Game utils install..."
@@ -241,8 +241,8 @@ arch-chroot /mnt /bin/bash << EOF
 EOF
 
 # Налаштування Gnome
-read -rp "Do you want to apply Gnome customizations? (Y/n): " apply_gnome
-if [[ "$apply_gnome" =~ ^[Yy]$ || -z "$apply_gnome" ]]; then
+read -rp "Do you want to apply Gnome customizations? (y/N): " apply_gnome
+if [[ "$apply_gnome" =~ ^[Yy]$ ]]; then
     arch-chroot /mnt /bin/bash << EOF
         gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
         gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
