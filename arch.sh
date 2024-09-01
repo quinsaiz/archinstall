@@ -240,18 +240,5 @@ arch-chroot /mnt /bin/bash << EOF
     fi
 EOF
 
-# Налаштування Gnome
-read -rp "Do you want to apply Gnome customizations? (y/N): " apply_gnome
-if [[ "$apply_gnome" =~ ^[Yy]$ ]]; then
-    arch-chroot /mnt /bin/bash << EOF
-        gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
-        gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
-        gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
-EOF
-    echo -e "${GREEN}✓${NC} Gnome customizations applied successfully."
-else
-    echo -e "${RED}✗${NC} Gnome customizations skipped."
-fi
-
 umount -R /mnt
 echo -e "${GREEN}✓${NC} Installation complete. Please reboot the system."

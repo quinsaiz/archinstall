@@ -42,10 +42,14 @@ Before running this script, ensure you have:
    ```bash
    git clone https://github.com/yourusername/archinstall.git
    cd archinstall
+   ```
 
 2. **Make the script executable and Run**:
-    ```bash
+    ```
     chmod +x arch.sh
+    ```
+3. **Run the script**:
+    ```
     ./arch.sh
     ```
     
