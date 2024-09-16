@@ -129,8 +129,6 @@ sudo systemctl start power-profiles-daemon
 First install vkbasalt if needed on AUR
 sudo pacman -S gamemode lib32-gamemode vkbasalt mangohud lib32-mangohud goverlay
 sudo usermod -aG gamemode $(whoami)
-sudo systemctl enable gamemoded
-sudo systemctl start gamemoded
 
 { zsh }
 sudo pacman -Sy zsh zsh-completions ttf-firacode-nerd
@@ -143,3 +141,15 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 sudo nano ~/.zshrc -> plugins=( git zsh-syntax-highlighting zsh-autosuggestions )
 nano ~/.nanorc -> include /usr/share/nano/*.nanorc
+
+{ WARP }
+paru -S cloudflare-warp-bin
+sudo systemctl enable warp-svc
+warp-cli registration new
+warp-cli connect
+
+{ Extensions }
+AppIndicator, BlurMyShell,Clipboard Indictor, Dash to Dock, Tiling Assistant, Dekstop Icons NG, System Monitor, User Themes
+Luminus
+
+sudo pacman -Rns $(pacman -Qdtq)

@@ -201,7 +201,7 @@ fi
 echo "Programs install..."
 arch-chroot /mnt pacman -S --noconfirm dosfstools ntfs-3g nano git btop neofetch bash-completion zsh zsh-completions power-profiles-daemon network-manager-applet
 echo "Programs install v2..."
-arch-chroot /mnt pacman -S firefox firefox-i18n-uk qbittorrent btop gnome-browser-connector gnome-tweaks ufw gufw
+arch-chroot /mnt pacman -S firefox firefox-i18n-uk qbittorrent btop gnome-browser-connector gnome-tweaks ufw gufw file-roller p7zip unrar
 echo "Audio install..."
 arch-chroot /mnt pacman -S --noconfirm alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2
 echo "Fonts install..."
