@@ -130,6 +130,10 @@ First install vkbasalt if needed on AUR
 sudo pacman -S gamemode lib32-gamemode vkbasalt mangohud lib32-mangohud goverlay
 sudo usermod -aG gamemode $(whoami)
 
+{ Steam }
+low memory steam: Exec=/usr/bin/steam-runtime -silent -no-browser -quicklogin -vgui -oldtraymenu -vrdisable -nofriendsui -skipstreamingdrivers -cef-force-occlusion -cef-force-opaque-backgrounds -cef-single-process -cef-disable-gpu -no-dwrite %U
+for Dota 2: mangohud gamemoderun RADV_PERFTEST=gpl,ngg %command% -high -threads 9 -novid -processheap -nocrashdialog -nojoy -novr -no-browser -map dota +cl_clock_recvmargin_enable 0 +dota_embers 0 +map_enable_portrait_worlds 0
+
 { zsh }
 sudo pacman -Sy zsh zsh-completions ttf-firacode-nerd
 sudo chsh -s /bin/zsh 
