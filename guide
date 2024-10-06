@@ -157,3 +157,101 @@ AppIndicator, BlurMyShell,Clipboard Indictor, Dash to Dock, Tiling Assistant, De
 Luminus
 
 sudo pacman -Rns $(pacman -Qdtq)
+
+{ Кастомне встановлення захищених зеркал }
+sudo pacman -Syu reflector
+reflector --protocol https --country Germany,Netherlands --age 6 --completion-percentage 100 --ipv4 --fastest 10 --sort score --save /etc/pacman.d/mirrorlist
+
+**Добавление репозиториев**
+curl https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
+tar xvf cachyos-repo.tar.xz && cd cachyos-repo
+sudo ./cachyos-repo.sh
+
+sudo nano /etc/pacman.conf
+розкоментувати:
+	Color
+	ILoveCandy
+	ParallelDownloads = 10
+
+**добавить:**
+[cachyos]
+Include = /etc/pacman.d/cachyos-mirrorlist
+**В зависимости от процессора добавить v3 или v4 репозитории **
+[cachyos-v3]
+Include = /etc/pacman.d/cachyos-v3-mirrorlist
+[cachyos-core-v3]
+Include = /etc/pacman.d/cachyos-v3-mirrorlist
+[cachyos-extra-v3]
+Include = /etc/pacman.d/cachyos-v3-mirrorlist
+
+[cachyos-v4]
+Include = /etc/pacman.d/cachyos-v4-mirrorlist
+[cachyos-core-v4]
+Include = /etc/pacman.d/cachyos-v4-mirrorlist
+[cachyos-extra-v4]
+Include = /etc/pacman.d/cachyos-v4-mirrorlist
+
+
+{ Установка yay }
+sudo pacman -S --needed git base-devel
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si
+
+{ mkinitcpio warning fix}
+yay -Sy mkinitcpio-firmware
+
+{ Пришвидшення загрузки }
+sudo nano /etc/mkinitcpio.conf
+HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)
+sudo mkinitcpio -P
+
+{ Установка кастомних ядер }
+
+ядра cachyos https://github.com/CachyOS/linux-cachyos
+ядра https://wiki.archlinux.org/title/Kernel
+
+{ Очистка Gnome }
+sudo pacman -D --asdeps $(pacman -Qqg gnome)
+sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gvfs gvfs-mtp
+sudo pacman -Rsn $(pacman -Qqgdtt gnome)
+
+yay -S intel-ucode ananicy-cpp cachyos-ananicy-rules irqbalance grub-customizer gamemode lib32-gamemode ttf-roboto
+sudo systemctl enable --now irqbalance
+sudo systemctl enable --now ananicy-cpp     
+sudo mkinitcpio -P                          
+sudo grub-mkconfig -o /boot/grub/grub.cfg 
+
+{ Установка шрифта }
+sudo nano /etc/fonts/local.conf
+
+```
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+    <alias>
+        <family>sans-serif</family>
+        <prefer>
+            <family>Roboto</family>
+        </prefer>
+    </alias>
+    <alias>
+        <family>serif</family>
+        <prefer>
+            <family>Roboto</family>
+        </prefer>
+    </alias>
+    <alias>
+        <family>monospace</family>
+        <prefer>
+            <family>Roboto Mono</family>
+        </prefer>
+    </alias>
+</fontconfig>
+```
+
+{ Параметри загрузки Grub }
+quiet mitigations=off nowatchdog page_alloc.shuffle=1 pci=pcie_bus_perf intel_idle.max_cstate=1 libahci.ignore_sss=1 noautogroup
+
+{ fstab for f2fs }
+f2fs   defaults,noatime,nodiratime,inline_xattr,inline_data,active_logs=6  0  0
