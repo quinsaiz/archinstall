@@ -53,19 +53,21 @@ systemctl enable NetworkManager
 reboot
 
 sudo nano /etc/pacman.conf -> multilib and parraleldownloads
+ при бажані розкоментувати: Color та ILoveCandy
 sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
 sudo pacman -S network-manager-applet
 reboot
 
-sudo pacman -S gnome gdm
+sudo pacman -S gnome
 sudo systemctl enable gdm
 reboot
 
 { Apps }
-sudo pacman -Syu firefox firefox-i18n-uk qbittorrent neofetch btop gnome-browser-connector gnome-tweaks bash-completion
+sudo pacman -Syu firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion
 
 { Interface }
-sudo pacman -S adw-gtk-theme OR adw-gtk-theme-git (AUR) + Suru Plus Icons (AUR)
+sudo pacman -S adw-gtk-theme
+paru -Sy suru-plus-git vlc-materia-skin-git
 
 { Swapfile }
 sudo fallocate -l 8G /swapfile
@@ -74,18 +76,18 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
   or sudo nano /etc/fstab -> /swapfile none swap defaults 0 0
-sudo nano /etc/sysctl.d/99-sysctl.conf -> vm.swappiness=10
-					  vm.vfs_cache_pressure=50
+sudo nano /etc/sysctl.d/99-sysctl.conf -> ```vm.swappiness=10
+					  vm.vfs_cache_pressure=50```
 					  
 { Video Driver mesa amdgpu }
 sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
 { Headphones }
-alsamixer
+alsamixer -> turn on headphones and set max volume Line
 cd ~/.config/autostart/
-gnome-text-editor amixer.sh -> (#!/bin/bash
+gnome-text-editor amixer.sh -> ```#!/bin/bash
 				amixer -c 0 sset "Headphone" 100% unmute
-				amixer -c 1 sset "Headphone" 100% unmute)
+				amixer -c 1 sset "Headphone" 100% unmute```
 chmod +x amixer.sh
 
 { Pipewire }
@@ -94,7 +96,8 @@ sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf
  (!) https://github.com/p-chan5/EasyPulse <- easyeffect presets COPY to ~/.config/easyeffects/output
 
 { Fonts }
-sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family + ttf-ms-win11-auto(AUR)
+sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family ttf-roboto 
+paru -S ttf-ms-win11-auto (AUR)
 
 { Firewall }
 sudo pacman -S ufw
@@ -107,11 +110,17 @@ sudo ufw enable
 sudo pacman -S gufw
 
 { Paru + Pamac }
-sudo pacman -S git
+sudo pacman -S --needed git
 git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin
 makepkg -sricCf
 paru -Syu pamac-aur
+
+{ Установка yay }
+sudo pacman -S --needed git
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si
 
 { Зміна гучності }
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
@@ -126,7 +135,7 @@ sudo systemctl enable power-profiles-daemon
 sudo systemctl start power-profiles-daemon
 
 { Ігри }
-First install vkbasalt if needed on AUR
+First install vkbasalt if needed on Paru or yay
 sudo pacman -S gamemode lib32-gamemode vkbasalt mangohud lib32-mangohud goverlay
 sudo usermod -aG gamemode $(whoami)
 
@@ -147,84 +156,52 @@ sudo nano ~/.zshrc -> plugins=( git zsh-syntax-highlighting zsh-autosuggestions 
 nano ~/.nanorc -> include /usr/share/nano/*.nanorc
 
 { WARP }
-paru -S cloudflare-warp-bin
+paru -Sy cloudflare-warp-bin
 sudo systemctl enable warp-svc
 warp-cli registration new
 warp-cli connect
 
 { Extensions }
-AppIndicator, BlurMyShell,Clipboard Indictor, Dash to Dock, Tiling Assistant, Dekstop Icons NG, System Monitor, User Themes
-Luminus
+AppIndicator, BlurMyShell,Clipboard Indictor, Dash to Dock, Tiling Assistant, Dekstop Icons NG, System Monitor, User Themes, Luminus
 
-sudo pacman -Rns $(pacman -Qdtq)
+{ Очищення Gnome від зайвих програм }
+sudo pacman -D --asdeps $(pacman -Qqg gnome)
+sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gvfs gvfs-mtp gnome-text-editor gnome-calculator evince gnome-disk-utility gnome-logs gnome-shell-extensions gnome-system-monitor loupe nautilus sushi xdg-desktop-portal-gnome xdg-desktop-portal-gnome xdg-user-dirs-gtk
+sudo pacman -Rsn $(pacman -Qqgdtt gnome)
+ (!) по бажанню очищення зайвих залежностей -> sudo pacman -Rns $(pacman -Qdtq)
 
 { Кастомне встановлення захищених зеркал }
-sudo pacman -Syu reflector
+sudo pacman -S reflector
 reflector --protocol https --country Germany,Netherlands --age 6 --completion-percentage 100 --ipv4 --fastest 10 --sort score --save /etc/pacman.d/mirrorlist
 
-**Добавление репозиториев**
+{ Кастомні репозиторії під ядро CachyOS}
 curl https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
 tar xvf cachyos-repo.tar.xz && cd cachyos-repo
 sudo ./cachyos-repo.sh
 
-sudo nano /etc/pacman.conf
-розкоментувати:
-	Color
-	ILoveCandy
-	ParallelDownloads = 10
-
-**добавить:**
-[cachyos]
-Include = /etc/pacman.d/cachyos-mirrorlist
-**В зависимости от процессора добавить v3 или v4 репозитории **
-[cachyos-v3]
-Include = /etc/pacman.d/cachyos-v3-mirrorlist
-[cachyos-core-v3]
-Include = /etc/pacman.d/cachyos-v3-mirrorlist
-[cachyos-extra-v3]
-Include = /etc/pacman.d/cachyos-v3-mirrorlist
-
-[cachyos-v4]
-Include = /etc/pacman.d/cachyos-v4-mirrorlist
-[cachyos-core-v4]
-Include = /etc/pacman.d/cachyos-v4-mirrorlist
-[cachyos-extra-v4]
-Include = /etc/pacman.d/cachyos-v4-mirrorlist
-
-
-{ Установка yay }
-sudo pacman -S --needed git base-devel
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg -si
-
 { mkinitcpio warning fix}
-yay -Sy mkinitcpio-firmware
+paru -Sy mkinitcpio-firmware
 
 { Пришвидшення загрузки }
 sudo nano /etc/mkinitcpio.conf
 HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)
 sudo mkinitcpio -P
 
-{ Установка кастомних ядер }
+{ Параметри загрузки Grub }
+quiet mitigations=off nowatchdog page_alloc.shuffle=1 pci=pcie_bus_perf intel_idle.max_cstate=1 libahci.ignore_sss=1 noautogroup
 
-ядра cachyos https://github.com/CachyOS/linux-cachyos
-ядра https://wiki.archlinux.org/title/Kernel
+{ fstab для f2fs }
+f2fs   defaults,noatime,nodiratime,inline_xattr,inline_data,active_logs=6  0  0
 
-{ Очистка Gnome }
-sudo pacman -D --asdeps $(pacman -Qqg gnome)
-sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gvfs gvfs-mtp
-sudo pacman -Rsn $(pacman -Qqgdtt gnome)
-
-yay -S intel-ucode ananicy-cpp cachyos-ananicy-rules irqbalance grub-customizer gamemode lib32-gamemode ttf-roboto
+{ Твіки CachyOS }
+yay -S intel-ucode ananicy-cpp cachyos-ananicy-rules irqbalance
 sudo systemctl enable --now irqbalance
 sudo systemctl enable --now ananicy-cpp     
 sudo mkinitcpio -P                          
 sudo grub-mkconfig -o /boot/grub/grub.cfg 
 
-{ Установка шрифта }
-sudo nano /etc/fonts/local.conf
-
+{ Налаштування шрифта }
+sudo nano /etc/fonts/local.conf ->
 ```
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
@@ -249,9 +226,3 @@ sudo nano /etc/fonts/local.conf
     </alias>
 </fontconfig>
 ```
-
-{ Параметри загрузки Grub }
-quiet mitigations=off nowatchdog page_alloc.shuffle=1 pci=pcie_bus_perf intel_idle.max_cstate=1 libahci.ignore_sss=1 noautogroup
-
-{ fstab for f2fs }
-f2fs   defaults,noatime,nodiratime,inline_xattr,inline_data,active_logs=6  0  0
