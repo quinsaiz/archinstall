@@ -79,7 +79,7 @@ echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
 sudo nano /etc/sysctl.d/99-sysctl.conf -> ```vm.swappiness=10
 					  vm.vfs_cache_pressure=50```
 					  
-{ Video Driver mesa amdgpu }
+{ Video Driver for AMD }
 sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
 { Headphones }
@@ -136,8 +136,9 @@ sudo systemctl start power-profiles-daemon
 
 { Ігри }
 First install vkbasalt if needed on Paru or yay
-sudo pacman -S gamemode lib32-gamemode vkbasalt mangohud lib32-mangohud goverlay
+sudo pacman -S gamemode lib32-gamemode mangohud lib32-mangohud goverlay
 sudo usermod -aG gamemode $(whoami)
+paru -Sy portproton
 
 { Steam }
 low memory steam: Exec=/usr/bin/steam-runtime -silent -no-browser -quicklogin -vgui -oldtraymenu -vrdisable -nofriendsui -skipstreamingdrivers -cef-force-occlusion -cef-force-opaque-backgrounds -cef-single-process -cef-disable-gpu -no-dwrite %U
