@@ -159,6 +159,7 @@ nano ~/.nanorc -> include /usr/share/nano/*.nanorc
 { WARP }
 paru -Sy cloudflare-warp-bin
 sudo systemctl enable warp-svc
+sudo systemctl start warp-svc
 warp-cli registration new
 warp-cli connect
 
