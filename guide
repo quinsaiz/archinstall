@@ -141,6 +141,7 @@ sudo usermod -aG gamemode $(whoami)
 paru -Sy portproton
 
 { Steam }
+sudo pacman -S steam
 low memory steam: Exec=/usr/bin/steam-runtime -silent -no-browser -quicklogin -vgui -oldtraymenu -vrdisable -nofriendsui -skipstreamingdrivers -cef-force-occlusion -cef-force-opaque-backgrounds -cef-single-process -cef-disable-gpu -no-dwrite %U
 for Dota 2: mangohud gamemoderun RADV_PERFTEST=gpl,ngg %command% -high -threads 9 -novid -processheap -nocrashdialog -nojoy -novr -no-browser -map dota +cl_clock_recvmargin_enable 0 +dota_embers 0 +map_enable_portrait_worlds 0
 
@@ -201,6 +202,9 @@ sudo systemctl enable --now irqbalance
 sudo systemctl enable --now ananicy-cpp     
 sudo mkinitcpio -P                          
 sudo grub-mkconfig -o /boot/grub/grub.cfg 
+
+{ Приховати ярлики в файл .desktop }
+NoDisplay=true
 
 { Налаштування шрифта }
 sudo nano /etc/fonts/local.conf ->
