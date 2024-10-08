@@ -38,29 +38,27 @@ nano /etc/hosts -> 127.0.0.1	localhost
 		   127.0.1.1	arch.localdomain arch
 
 mkinitcpio -P
-passwd
 pacman -S grub efibootmgr dhcpcd dhclient networkmanager
 grub-install /dev/nvme0n1
 grub-mkconfig -o /boot/grub/grub.cfg
-exit
-umount -R /mnt
-reboot
 
+passwd
 nano /etc/sudoers
 useradd -m -G wheel -s /bin/bash quinsaiz
 passwd quinsaiz
 systemctl enable NetworkManager
+exit
+umount -R /mnt
 reboot
 
-sudo nano /etc/pacman.conf -> multilib and parraleldownloads
- при бажані розкоментувати: Color та ILoveCandy
-sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
-sudo pacman -S network-manager-applet
-reboot
-
-sudo pacman -S gnome
+sudo nano /etc/pacman.conf -> multilib and ParralelDownloads, Color, ILoveCandy
+sudo pacman -Syu network-manager-applet gnome
 sudo systemctl enable gdm
 reboot
+
+ON SYSTEM
+{ Video Driver for AMD }
+sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
 { Apps }
 sudo pacman -Syu firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion
@@ -79,9 +77,6 @@ echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
 sudo nano /etc/sysctl.d/99-sysctl.conf -> ```vm.swappiness=10
 					  vm.vfs_cache_pressure=50```
 					  
-{ Video Driver for AMD }
-sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
-
 { Headphones }
 alsamixer -> turn on headphones and set max volume Line
 cd ~/.config/autostart/
@@ -97,17 +92,16 @@ sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf
 
 { Fonts }
 sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family ttf-roboto 
-paru -S ttf-ms-win11-auto (AUR)
+paru -Sy ttf-ms-win11-auto (AUR)
 
 { Firewall }
-sudo pacman -S ufw
+sudo pacman -S ufw gufw
 sudo systemctl enable ufw
 sudo systemctl start ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
  (!) optional(sudo ufw allow ssh; sudo ufw allow http; sudo ufw allow https)
 sudo ufw enable
-sudo pacman -S gufw
 
 { Paru + Pamac }
 sudo pacman -S --needed git
