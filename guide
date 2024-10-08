@@ -76,7 +76,20 @@ echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
   or sudo nano /etc/fstab -> /swapfile none swap defaults 0 0
 sudo nano /etc/sysctl.d/99-sysctl.conf -> ```vm.swappiness=10
 					  vm.vfs_cache_pressure=50```
-					  
+
+{ Zram }
+sudo pacman -S zram-generator
+ reboot
+sudo systemctl start systemd-zram-setup@zram0.service
+
+sudo nano /etc/systemd/zram-generator.conf -> 
+					     ```[zram0]
+						zram-size = ram
+						compression-algorithm = zstd
+						swap-priority = 100
+						fs-type = swap```
+
+
 { Headphones }
 alsamixer -> turn on headphones and set max volume Line
 cd ~/.config/autostart/
