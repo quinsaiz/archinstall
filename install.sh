@@ -22,10 +22,10 @@ timedatectl set-ntp true
 echo "${BLUE}=== Enter basic information ===${RESET}"
 read -p "${YELLOW}Enter hostname: ${RESET}" HOSTNAME
 read -s -p "${YELLOW}Enter root password: ${RESET}" ROOT_PASS
-echo
+echo ""
 read -p "${YELLOW}Enter username: ${RESET}" USERNAME
 read -s -p "${YELLOW}Enter password for $USERNAME: ${RESET}" USER_PASS
-echo
+echo ""
 
 # Вибір ядра
 echo "${BLUE}=== Select kernel ===${RESET}"
@@ -40,7 +40,7 @@ esac
 
 # Вибір диска
 echo "${BLUE}=== Select disk for installation ===${RESET}"
-lsblk -d -o name,type | grep disk
+lsblk -d -o name,type | grep disk | awk '{print "/dev/"$1 " " $2}'
 read -p "${YELLOW}Disk name (e.g., /dev/sda, /dev/nvme0n1): ${RESET}" DISK
 TOTAL_SIZE=$(parted $DISK print | grep "Disk $DISK" | awk '{print $3}' | sed 's/GB//')
 echo "Total disk size: ${TOTAL_SIZE}GB"
@@ -50,13 +50,24 @@ echo "${BLUE}=== Partition setup ===${RESET}"
 read -p "${YELLOW}EFI size (e.g., 2G, default 512M): ${RESET}" EFI_SIZE
 EFI_SIZE=${EFI_SIZE:-512M}
 EFI_END=$(echo "$EFI_SIZE" | sed 's/[MG]//')
-REMAINING=$(echo "$TOTAL_SIZE - $EFI_END" | bc)
+if [[ "$EFI_SIZE" =~ M$ ]]; then
+    EFI_END=$(echo "scale=2; $EFI_END / 1024" | bc)
+fi
+REMAINING=$(echo "scale=2; $TOTAL_SIZE - $EFI_END" | bc)
 
 echo "Remaining: ${REMAINING}GB"
 read -p "${YELLOW}Root (/) size (e.g., 100G): ${RESET}" ROOT_SIZE
 ROOT_SIZE=${ROOT_SIZE:-20G}
-ROOT_END=$(echo "$EFI_END + $(echo $ROOT_SIZE | sed 's/[MG]//')" | bc)
-REMAINING=$(echo "$TOTAL_SIZE - $ROOT_END" | bc)
+ROOT_END=$(echo "$ROOT_SIZE" | sed 's/[MG]//')
+if [[ "$ROOT_SIZE" =~ M$ ]]; then
+    ROOT_END=$(echo "scale=2; $ROOT_END / 1024" | bc)
+fi
+ROOT_END=$(echo "scale=2; $EFI_END + $ROOT_END" | bc)
+REMAINING=$(echo "scale=2; $TOTAL_SIZE - $ROOT_END" | bc)
+if [ $(echo "$ROOT_END < 10" | bc) -eq 1 ]; then
+    echo "${RED}Root size must be at least 10GB!${RESET}"
+    exit 1
+fi
 
 echo "Remaining: ${REMAINING}GB"
 read -p "${YELLOW}Create /home? (y/n): ${RESET}" CREATE_HOME
@@ -83,11 +94,11 @@ fi
 # Розмітка диска
 echo "${YELLOW}Partitioning disk ${DISK}...${RESET}"
 parted -s $DISK mklabel gpt
-parted -s $DISK mkpart ESP fat32 1MiB $EFI_SIZE
+parted -s $DISK mkpart ESP fat32 1MiB "$EFI_SIZE"
 parted -s $DISK set 1 esp on
-parted -s $DISK mkpart root $FS $EFI_SIZE $ROOT_END
+parted -s $DISK mkpart root "$FS" "$EFI_SIZE" "$ROOT_END"G
 if [ "$HAS_HOME" == "yes" ]; then
-    parted -s $DISK mkpart home $FS $ROOT_END 100%
+    parted -s $DISK mkpart home "$FS" "$ROOT_END"G 100%
 fi
 
 # Форматування розділів
