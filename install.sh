@@ -9,59 +9,59 @@ RESET=$(tput sgr0)
 
 # Перевірка запуску в live-середовищі
 if [ ! -d /sys/firmware/efi ]; then
-    echo "${RED}Цей скрипт потрібно запускати в UEFI live-середовищі Arch Linux!${RESET}"
+    echo "${RED}This script must be run in an Arch Linux UEFI live environment!${RESET}"
     exit 1
 fi
 
-echo "${GREEN}Ласкаво просимо до інсталятора Arch Linux від quinsaiz!${RESET}"
+echo "${GREEN}Welcome to quinsaiz's Arch Linux Installer!${RESET}"
 
 # Синхронізація часу
 timedatectl set-ntp true
 
 # Запит базових даних
-echo "${BLUE}=== Введіть базову інформацію ===${RESET}"
-read -p "${YELLOW}Введіть ім'я хоста: ${RESET}" HOSTNAME
-read -s -p "${YELLOW}Введіть пароль для root: ${RESET}" ROOT_PASS
+echo "${BLUE}=== Enter basic information ===${RESET}"
+read -p "${YELLOW}Enter hostname: ${RESET}" HOSTNAME
+read -s -p "${YELLOW}Enter root password: ${RESET}" ROOT_PASS
 echo
-read -p "${YELLOW}Введіть ім'я користувача: ${RESET}" USERNAME
-read -s -p "${YELLOW}Введіть пароль для $USERNAME: ${RESET}" USER_PASS
+read -p "${YELLOW}Enter username: ${RESET}" USERNAME
+read -s -p "${YELLOW}Enter password for $USERNAME: ${RESET}" USER_PASS
 echo
 
 # Вибір ядра
-echo "${BLUE}=== Виберіть ядро ===${RESET}"
+echo "${BLUE}=== Select kernel ===${RESET}"
 echo "1) linux 2) linux-zen 3) linux-lts"
-read -p "${YELLOW}Вибір: ${RESET}" KERNEL
+read -p "${YELLOW}Choice: ${RESET}" KERNEL
 case $KERNEL in
     1) KERNEL_PKG="linux linux-headers" ;;
     2) KERNEL_PKG="linux-zen linux-zen-headers" ;;
     3) KERNEL_PKG="linux-lts linux-lts-headers" ;;
-    *) echo "${RED}Невірний вибір, встановлюємо linux-zen${RESET}"; KERNEL_PKG="linux-zen linux-zen-headers" ;;
+    *) echo "${RED}Invalid choice, installing linux-zen${RESET}"; KERNEL_PKG="linux-zen linux-zen-headers" ;;
 esac
 
 # Вибір диска
-echo "${BLUE}=== Виберіть диск для встановлення ===${RESET}"
+echo "${BLUE}=== Select disk for installation ===${RESET}"
 lsblk -d -o name,type | grep disk
-read -p "${YELLOW}Назва диска (наприклад, /dev/sda, /dev/nvme0n1): ${RESET}" DISK
+read -p "${YELLOW}Disk name (e.g., /dev/sda, /dev/nvme0n1): ${RESET}" DISK
 TOTAL_SIZE=$(parted $DISK print | grep "Disk $DISK" | awk '{print $3}' | sed 's/GB//')
-echo "Загальний розмір диска: ${TOTAL_SIZE}GB"
+echo "Total disk size: ${TOTAL_SIZE}GB"
 
 # Вибір розмірів розділів
-echo "${BLUE}=== Налаштування розділів ===${RESET}"
-read -p "${YELLOW}Розмір EFI (наприклад, 2G, за замовчуванням 512M): ${RESET}" EFI_SIZE
+echo "${BLUE}=== Partition setup ===${RESET}"
+read -p "${YELLOW}EFI size (e.g., 2G, default 512M): ${RESET}" EFI_SIZE
 EFI_SIZE=${EFI_SIZE:-512M}
 EFI_END=$(echo "$EFI_SIZE" | sed 's/[MG]//')
 REMAINING=$(echo "$TOTAL_SIZE - $EFI_END" | bc)
 
-echo "Залишилось: ${REMAINING}GB"
-read -p "${YELLOW}Розмір / (наприклад, 100G): ${RESET}" ROOT_SIZE
+echo "Remaining: ${REMAINING}GB"
+read -p "${YELLOW}Root (/) size (e.g., 100G): ${RESET}" ROOT_SIZE
 ROOT_SIZE=${ROOT_SIZE:-20G}
 ROOT_END=$(echo "$EFI_END + $(echo $ROOT_SIZE | sed 's/[MG]//')" | bc)
 REMAINING=$(echo "$TOTAL_SIZE - $ROOT_END" | bc)
 
-echo "Залишилось: ${REMAINING}GB"
-read -p "${YELLOW}Створити /home? (y/n): ${RESET}" CREATE_HOME
+echo "Remaining: ${REMAINING}GB"
+read -p "${YELLOW}Create /home? (y/n): ${RESET}" CREATE_HOME
 if [ "$CREATE_HOME" == "y" ]; then
-    read -p "${YELLOW}Розмір /home (залиште порожнім для всього вільного простору): ${RESET}" HOME_SIZE
+    read -p "${YELLOW}Home size (leave blank for all remaining space): ${RESET}" HOME_SIZE
     HOME_SIZE=${HOME_SIZE:-${REMAINING}G}
     HAS_HOME="yes"
 else
@@ -69,9 +69,9 @@ else
 fi
 
 # Вибір файлової системи
-echo "${BLUE}=== Виберіть файлову систему ===${RESET}"
+echo "${BLUE}=== Select filesystem ===${RESET}"
 echo "1) ext4 2) f2fs"
-read -p "${YELLOW}Вибір: ${RESET}" FS_TYPE
+read -p "${YELLOW}Choice: ${RESET}" FS_TYPE
 if [ "$FS_TYPE" == "1" ]; then
     FS="ext4"
     FS_TOOLS="e2fsprogs"
@@ -81,7 +81,7 @@ else
 fi
 
 # Розмітка диска
-echo "${YELLOW}Розмітка диска ${DISK}...${RESET}"
+echo "${YELLOW}Partitioning disk ${DISK}...${RESET}"
 parted -s $DISK mklabel gpt
 parted -s $DISK mkpart ESP fat32 1MiB $EFI_SIZE
 parted -s $DISK set 1 esp on
@@ -91,21 +91,39 @@ if [ "$HAS_HOME" == "yes" ]; then
 fi
 
 # Форматування розділів
-echo "${YELLOW}Форматування розділів...${RESET}"
-mkfs.vfat -F32 ${DISK}p1
-mkfs.$FS -L "arch" ${DISK}p2
-if [ "$HAS_HOME" == "yes" ]; then
-    mkfs.$FS -L "home" ${DISK}p3
+echo "${YELLOW}Formatting partitions...${RESET}"
+if [[ "$DISK" =~ ^/dev/nvme.* ]]; then
+    mkfs.vfat -F32 "${DISK}p1"
+    mkfs.$FS -L "arch" "${DISK}p2"
+    if [ "$HAS_HOME" == "yes" ]; then
+        mkfs.$FS -L "home" "${DISK}p3"
+    fi
+else
+    mkfs.vfat -F32 "${DISK}1"
+    mkfs.$FS -L "arch" "${DISK}2"
+    if [ "$HAS_HOME" == "yes" ]; then
+        mkfs.$FS -L "home" "${DISK}3"
+    fi
 fi
 
 # Монтування
-echo "${YELLOW}Монтування розділів...${RESET}"
-mount ${DISK}p2 /mnt
+echo "${YELLOW}Mounting partitions...${RESET}"
+if [[ "$DISK" =~ ^/dev/nvme.* ]]; then
+    ROOT_PART="${DISK}p2"
+    EFI_PART="${DISK}p1"
+    HOME_PART="${DISK}p3"
+else
+    ROOT_PART="${DISK}2"
+    EFI_PART="${DISK}1"
+    HOME_PART="${DISK}3"
+fi
+
+mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot/efi
-mount ${DISK}p1 /mnt/boot/efi
+mount "$EFI_PART" /mnt/boot/efi
 if [ "$HAS_HOME" == "yes" ]; then
     mkdir -p /mnt/home
-    mount ${DISK}p3 /mnt/home
+    mount "$HOME_PART" /mnt/home
 fi
 
 # Визначення процесора
