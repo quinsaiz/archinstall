@@ -70,14 +70,18 @@ if [ $(echo "$ROOT_END < 10" | bc) -eq 1 ]; then
 fi
 
 echo "Remaining: ${REMAINING}GB"
-read -p "${YELLOW}Create /home? (y/n): ${RESET}" CREATE_HOME
-if [ "$CREATE_HOME" == "y" ]; then
-    read -p "${YELLOW}Home size (leave blank for all remaining space): ${RESET}" HOME_SIZE
-    HOME_SIZE=${HOME_SIZE:-${REMAINING}G}
-    HAS_HOME="yes"
-else
-    HAS_HOME="no"
-fi
+read -p "${YELLOW}Create /home? (y/N): ${RESET}" CREATE_HOME
+case "$CREATE_HOME" in
+    [Yy]|[Yy][Ee][Ss])  # Враховує y, Y, yes, Yes, YES
+        read -p "${YELLOW}Home size (leave blank for all remaining space): ${RESET}" HOME_SIZE
+        HOME_SIZE=${HOME_SIZE:-${REMAINING}G}
+        HAS_HOME="yes"
+        ;;
+    *)
+        echo "${GREEN}Skipping /home partition creation.${RESET}"
+        HAS_HOME="no"
+        ;;
+esac
 
 # Вибір файлової системи
 echo "${BLUE}=== Select filesystem ===${RESET}"
@@ -192,7 +196,7 @@ fi
 
 # Вибір os-prober
 echo "${BLUE}=== Detecting other OS ===${RESET}"
-echo "Install os-prober? 1) Так 2) Ні"
+echo "Install os-prober? 1) Yes 2) No"
 read -p "${YELLOW}Choice: ${RESET}" OSPROBER
 if [ "$OSPROBER" == "1" ]; then
     OSPROBER_PKG="os-prober"
@@ -217,17 +221,17 @@ echo -e "$VCONSOLE" > /etc/vconsole.conf
 echo "$HOSTNAME" > /etc/hostname
 echo -e "127.0.0.1\tlocalhost\n::1\t\tlocalhost\n127.0.1.1\t$HOSTNAME.localdomain $HOSTNAME" > /etc/hosts
 
+# Налаштування ядра для GPU
+sed -i "s/MODULES=()/MODULES=($MODULES)/" /etc/mkinitcpio.conf
+mkinitcpio -P
+
 # Оптимізація pacman.conf
 sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
 sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
 sed -i 's/^#Color/Color/' /etc/pacman.conf
 
-# Налаштування ядра для GPU
-sed -i "s/MODULES=()/MODULES=($MODULES)/" /etc/mkinitcpio.conf
-mkinitcpio -P
-
 # Налаштування GRUB
-pacman -S --noconfirm grub efibootmgr $OSPROBER_PKG
+pacman -Sy --noconfirm grub efibootmgr $OSPROBER_PKG
 grub-install --target=x86_64-efi --efi-directory=/boot/efi $DISK
 if [ "$OSPROBER" == "1" ]; then
     sed -i 's/#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
