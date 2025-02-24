@@ -47,10 +47,9 @@ sed -i 's/^#Color/Color/' /etc/pacman.conf
 echo "MODULES=(amdgpu)" >> /etc/mkinitcpio.conf
 mkinitcpio -P
 
-# Встановлення завантажувача
+# Встановлення завантажувача (/etc/default/grub можна ще встановити os-prober)
 pacman -S --noconfirm grub efibootmgr
 grub-install /dev/nvme0n1
- optional nano /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Паролі
@@ -75,7 +74,7 @@ sudo systemctl enable gdm
 reboot
 
 
-# У СИСТЕМІ
+# У СИСТЕМІ 
 # Встановлення драйверів GPU
 sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
@@ -84,47 +83,12 @@ sudo pacman -S firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-brows
 ## Встановлення тем інтерфейсу через AUR
 paru -Sy suru-plus-git vlc-materia-skin-git
 
-# Створення SWAP
-## swapwile
-sudo fallocate -l 8G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo "/swapfile none swap defaults 0 0" | sudo tee -a /etc/fstab
-### Налаштування swappiness
-echo -e "vm.swappiness=10\nvm.vfs_cache_pressure=50" | sudo tee /etc/sysctl.d/99-sysctl.conf
-
-## zram-generator
-sudo pacman -S zram-generator
-echo -e "[zram0]\nzram-size=ram\ncompression-algorithm=zstd\nswap-priority=100\nfs-type=swap" | sudo tee /etc/zram-generator.conf
-systemctl enable --now systemd-zram-setup@zram0.service
-
-# Налаштування навушників (передня панель)
-alsamixer (налаштувати потрібне, зокрема включити Line та на 100)
-mkdir -p ~/.config/autostart
-echo -e "#!/bin/bash\nfor card in 0 1; do\n    amixer -c \$card sset \"Headphone\" 100% unmute 2>/dev/null || true\n    amixer -c \$card sset \"Front\" 100% unmute 2>/dev/null || true\ndone" > ~/.config/autostart/amixer.sh
-chmod +x ~/.config/autostart/amixer.sh
-echo -e "[Desktop Entry]\nName=Amixer Headphone Fix\nComment=Enable headphone front panel on startup\nExec=/home/quinsaiz/.config/autostart/amixer.sh\nType=Application\nTerminal=true\nHidden=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\nIcon=music" > ~/.config/autostart/amixer.desktop
-
-## Вміст файлів повинен бути
-### amixer.sh
-#!/bin/bash
-for card in 0 1; do
-    amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
-    amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
-done
-
-### amixer.desktop
-[Desktop Entry]
-Name=Amixer Headphone Fix
-Comment=Enable headphone front panel on startup
-Exec=/home/quinsaiz/.config/autostart/amixer.sh
-Type=Application
-Terminal=true
-Hidden=false
-StartupNotify=false
-X-GNOME-Autostart-enabled=true
-Icon=music
+# Встановлення paru та pamac
+sudo pacman -S --needed git
+git clone https://aur.archlinux.org/paru-bin.git
+cd paru-bin
+makepkg -sricCf
+paru -Syu pamac-aur
 
 # Налаштування звуку та еквалайзера
 ## Пресети тут https://github.com/p-chan5/EasyPulse, скопіювати в ~/.config/easyeffects/output
@@ -140,20 +104,6 @@ sudo systemctl enable --now ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw enable
-
-# Встановлення paru та pamac
-sudo pacman -S --needed git
-git clone https://aur.archlinux.org/paru-bin.git
-cd paru-bin
-makepkg -sricCf
-paru -Syu pamac-aur
-
-# Зміна гучності
-gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
-
-# Зміна розкладки
-gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
-gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
 
 # PowerProfiles
 sudo pacman -S power-profiles-daemon
@@ -201,9 +151,58 @@ reflector --protocol https --country Germany,Netherlands --age 6 --sort rate --s
 # Оптимізація GRUB
 quiet mitigations=off nowatchdog pci=pcie_bus_perf noautogroup
 
+# Зміна гучності
+gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
+
+# Зміна розкладки
+gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
+gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
+
 # Оптимізація fstab
 f2fs	rw,noatime,discard,background_gc=on,inline_xattr,inline_data
 ext4	rw,noatime,discard,data=ordered
+
+# Створення SWAP
+## swapwile
+sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo "/swapfile none swap defaults 0 0" | sudo tee -a /etc/fstab
+### Налаштування swappiness
+echo -e "vm.swappiness=10\nvm.vfs_cache_pressure=50" | sudo tee /etc/sysctl.d/99-sysctl.conf
+
+## zram-generator
+sudo pacman -S zram-generator
+echo -e "[zram0]\nzram-size=ram\ncompression-algorithm=zstd\nswap-priority=100\nfs-type=swap" | sudo tee /etc/zram-generator.conf
+systemctl enable --now systemd-zram-setup@zram0.service
+
+# Налаштування навушників (передня панель)
+alsamixer (налаштувати потрібне, зокрема включити Line та на 100)
+mkdir -p ~/.config/autostart
+echo -e "#!/bin/bash\nfor card in 0 1; do\n    amixer -c \$card sset \"Headphone\" 100% unmute 2>/dev/null || true\n    amixer -c \$card sset \"Front\" 100% unmute 2>/dev/null || true\ndone" > ~/.config/autostart/amixer.sh
+chmod +x ~/.config/autostart/amixer.sh
+echo -e "[Desktop Entry]\nName=Amixer Headphone Fix\nComment=Enable headphone front panel on startup\nExec=/home/quinsaiz/.config/autostart/amixer.sh\nType=Application\nTerminal=true\nHidden=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\nIcon=music" > ~/.config/autostart/amixer.desktop
+
+## Вміст файлів повинен бути
+### amixer.sh
+#!/bin/bash
+for card in 0 1; do
+    amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
+    amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
+done
+
+### amixer.desktop
+[Desktop Entry]
+Name=Amixer Headphone Fix
+Comment=Enable headphone front panel on startup
+Exec=/home/quinsaiz/.config/autostart/amixer.sh
+Type=Application
+Terminal=true
+Hidden=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+Icon=music
 
 # Розширення, які я використовую
 AppIndicator, BlurMyShell, Clipboard Indictor, Dash to Dock, Tiling Assistant, System Monitor, User Themes
