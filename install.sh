@@ -42,103 +42,115 @@ esac
 echo "${BLUE}=== Select disk for installation ===${RESET}"
 lsblk -d -o name,type | grep disk | awk '{print "/dev/"$1 " " $2}'
 read -p "${YELLOW}Disk name (e.g., /dev/sda, /dev/nvme0n1): ${RESET}" DISK
-TOTAL_SIZE=$(parted $DISK print | grep "Disk $DISK" | awk '{print $3}' | sed 's/GB//')
-echo "Total disk size: ${TOTAL_SIZE}GB"
 
-# Вибір розмірів розділів
-echo "${BLUE}=== Partition setup ===${RESET}"
-read -p "${YELLOW}EFI size (e.g., 2G, default 512M): ${RESET}" EFI_SIZE
-EFI_SIZE=${EFI_SIZE:-512M}
-EFI_END=$(echo "$EFI_SIZE" | sed 's/[MG]//')
-if [[ "$EFI_SIZE" =~ M$ ]]; then
-    EFI_END=$(echo "scale=2; $EFI_END / 1024" | bc)
-fi
-REMAINING=$(echo "scale=2; $TOTAL_SIZE - $EFI_END" | bc)
+# Запит про розмітку
+echo "${BLUE}=== Partitioning ===${RESET}"
+echo "Are partitions already created and mounted? 1) Yes 2) No"
+read -p "${YELLOW}Choice: ${RESET}" PARTITIONED
+if [ "$PARTITIONED" == "1" ]; then
+    echo "${GREEN}Skipping partitioning and mounting, proceeding to package installation...${RESET}"
+else
+    TOTAL_SIZE=$(parted $DISK print | grep "Disk $DISK" | awk '{print $3}' | sed 's/GB//')
+    echo "Total disk size: ${TOTAL_SIZE}GB"
 
-echo "Remaining: ${REMAINING}GB"
-read -p "${YELLOW}Root (/) size (e.g., 100G): ${RESET}" ROOT_SIZE
-ROOT_SIZE=${ROOT_SIZE:-20G}
-ROOT_END=$(echo "$ROOT_SIZE" | sed 's/[MG]//')
-if [[ "$ROOT_SIZE" =~ M$ ]]; then
-    ROOT_END=$(echo "scale=2; $ROOT_END / 1024" | bc)
-fi
-ROOT_END=$(echo "scale=2; $EFI_END + $ROOT_END" | bc)
-REMAINING=$(echo "scale=2; $TOTAL_SIZE - $ROOT_END" | bc)
-if [ $(echo "$ROOT_END < 10" | bc) -eq 1 ]; then
-    echo "${RED}Root size must be at least 10GB!${RESET}"
-    exit 1
-fi
+    # Вибір розмірів розділів
+    echo "${BLUE}=== Partition setup ===${RESET}"
+    read -p "${YELLOW}EFI size (e.g., 2G, default 512M): ${RESET}" EFI_SIZE
+    EFI_SIZE=${EFI_SIZE:-512M}
+    EFI_END=$(echo "$EFI_SIZE" | sed 's/[MG]//')
+    if [[ "$EFI_SIZE" =~ M$ ]]; then
+        EFI_END=$(echo "scale=2; $EFI_END / 1024" | bc)
+    fi
+    REMAINING=$(echo "scale=2; $TOTAL_SIZE - $EFI_END" | bc)
 
-echo "Remaining: ${REMAINING}GB"
-read -p "${YELLOW}Create /home? (y/N): ${RESET}" CREATE_HOME
-case "$CREATE_HOME" in
-    [Yy]|[Yy][Ee][Ss])  # Враховує y, Y, yes, Yes, YES
-        read -p "${YELLOW}Home size (leave blank for all remaining space): ${RESET}" HOME_SIZE
-        HOME_SIZE=${HOME_SIZE:-${REMAINING}G}
-        HAS_HOME="yes"
-        ;;
-    *)
-        echo "${GREEN}Skipping /home partition creation.${RESET}"
+    echo "Remaining: ${REMAINING}GB"
+    read -p "${YELLOW}Root (/) size (e.g., 100G, Enter for all space): ${RESET}" ROOT_SIZE
+    if [ -z "$ROOT_SIZE" ]; then
+        ROOT_SIZE="${REMAINING}G"
+    fi
+    ROOT_END=$(echo "$ROOT_SIZE" | sed 's/[MG]//')
+    if [[ "$ROOT_SIZE" =~ M$ ]]; then
+        ROOT_END=$(echo "scale=2; $ROOT_END / 1024" | bc)
+    fi
+    ROOT_END=$(echo "scale=2; $EFI_END + $ROOT_END" | bc)
+    REMAINING=$(echo "scale=2; $TOTAL_SIZE - $ROOT_END" | bc)
+    if [ $(echo "$ROOT_END < 10" | bc) -eq 1 ]; then
+        echo "${RED}Root size must be at least 10GB!${RESET}"
+        exit 1
+    fi
+
+    if [ $(echo "$REMAINING > 0" | bc) -eq 1 ]; then
+        echo "Remaining: ${REMAINING}GB"
+        read -p "${YELLOW}Create /home? (y/N): ${RESET}" CREATE_HOME
+        case "$CREATE_HOME" in
+            [Yy]|[Yy][Ee][Ss])
+                read -p "${YELLOW}Home size (leave blank for all remaining space): ${RESET}" HOME_SIZE
+                HOME_SIZE=${HOME_SIZE:-${REMAINING}G}
+                HAS_HOME="yes"
+                ;;
+            *)
+                echo "${GREEN}Skipping /home partition creation.${RESET}"
+                HAS_HOME="no"
+                ;;
+        esac
+    else
         HAS_HOME="no"
-        ;;
-esac
-
-# Вибір файлової системи
-echo "${BLUE}=== Select filesystem ===${RESET}"
-echo "1) ext4 2) f2fs"
-read -p "${YELLOW}Choice: ${RESET}" FS_TYPE
-if [ "$FS_TYPE" == "1" ]; then
-    FS="ext4"
-    FS_TOOLS="e2fsprogs"
-else
-    FS="f2fs"
-    FS_TOOLS="f2fs-tools"
-fi
-
-# Розмітка диска
-echo "${YELLOW}Partitioning disk ${DISK}...${RESET}"
-parted -s $DISK mklabel gpt
-parted -s $DISK mkpart ESP fat32 1MiB "$EFI_SIZE"
-parted -s $DISK set 1 esp on
-parted -s $DISK mkpart root "$FS" "$EFI_SIZE" "$ROOT_END"G
-if [ "$HAS_HOME" == "yes" ]; then
-    parted -s $DISK mkpart home "$FS" "$ROOT_END"G 100%
-fi
-
-# Форматування розділів
-echo "${YELLOW}Formatting partitions...${RESET}"
-if [[ "$DISK" =~ ^/dev/nvme.* ]]; then
-    mkfs.vfat -F32 "${DISK}p1"
-    mkfs.$FS -L "arch" "${DISK}p2"
-    if [ "$HAS_HOME" == "yes" ]; then
-        mkfs.$FS -L "home" "${DISK}p3"
+        echo "${YELLOW}No space left for /home, all space used for /.${RESET}"
     fi
-else
-    mkfs.vfat -F32 "${DISK}1"
-    mkfs.$FS -L "arch" "${DISK}2"
-    if [ "$HAS_HOME" == "yes" ]; then
-        mkfs.$FS -L "home" "${DISK}3"
+
+    # Вибір файлової системи
+    echo "${BLUE}=== Select filesystem ===${RESET}"
+    echo "1) ext4 2) f2fs"
+    read -p "${YELLOW}Choice: ${RESET}" FS_TYPE
+    if [ "$FS_TYPE" == "1" ]; then
+        FS="ext4"
+        FS_TOOLS="e2fsprogs"
+    else
+        FS="f2fs"
+        FS_TOOLS="f2fs-tools"
     fi
-fi
 
-# Монтування
-echo "${YELLOW}Mounting partitions...${RESET}"
-if [[ "$DISK" =~ ^/dev/nvme.* ]]; then
-    ROOT_PART="${DISK}p2"
-    EFI_PART="${DISK}p1"
-    HOME_PART="${DISK}p3"
-else
-    ROOT_PART="${DISK}2"
-    EFI_PART="${DISK}1"
-    HOME_PART="${DISK}3"
-fi
+    # Розмітка диска
+    echo "${YELLOW}Partitioning disk ${DISK}...${RESET}"
+    parted -s $DISK mklabel gpt
+    parted -s $DISK mkpart ESP fat32 1MiB "$EFI_SIZE"
+    parted -s $DISK set 1 esp on
+    parted -s $DISK mkpart root "$FS" "$EFI_SIZE" "$ROOT_END"G
+    if [ "$HAS_HOME" == "yes" ]; then
+        parted -s $DISK mkpart home "$FS" "$ROOT_END"G 100%
+    fi
 
-mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot/efi
-mount "$EFI_PART" /mnt/boot/efi
-if [ "$HAS_HOME" == "yes" ]; then
-    mkdir -p /mnt/home
-    mount "$HOME_PART" /mnt/home
+    # Форматування розділів
+    echo "${YELLOW}Formatting partitions...${RESET}"
+    if [[ "$DISK" =~ ^/dev/nvme.* ]]; then
+        mkfs.vfat -F32 "${DISK}p1"
+        mkfs.$FS -L "arch" "${DISK}p2"
+        if [ "$HAS_HOME" == "yes" ]; then
+            mkfs.$FS -L "home" "${DISK}p3"
+        fi
+        ROOT_PART="${DISK}p2"
+        EFI_PART="${DISK}p1"
+        HOME_PART="${DISK}p3"
+    else
+        mkfs.vfat -F32 "${DISK}1"
+        mkfs.$FS -L "arch" "${DISK}2"
+        if [ "$HAS_HOME" == "yes" ]; then
+            mkfs.$FS -L "home" "${DISK}3"
+        fi
+        ROOT_PART="${DISK}2"
+        EFI_PART="${DISK}1"
+        HOME_PART="${DISK}3"
+    fi
+
+    # Монтування
+    echo "${YELLOW}Mounting partitions...${RESET}"
+    mount "$ROOT_PART" /mnt
+    mkdir -p /mnt/boot/efi
+    mount "$EFI_PART" /mnt/boot/efi
+    if [ "$HAS_HOME" == "yes" ]; then
+        mkdir -p /mnt/home
+        mount "$HOME_PART" /mnt/home
+    fi
 fi
 
 # Визначення процесора
@@ -153,10 +165,10 @@ echo "${BLUE}=== Choose a GPU driver ===${RESET}"
 echo "1) AMD (mesa) 2) NVIDIA (nvidia-open-dkms) 3) AMD+NVIDIA (notebook)"
 read -p "${YELLOW}Choice: ${RESET}" GPU
 case $GPU in
-    1) GPU_PKGS="mesa vulkan-radeon vulkan-icd-loader"; MODULES="amdgpu" ;;
-    2) GPU_PKGS="nvidia-open-dkms nvidia-utils nvidia-settings vulkan-icd-loader"; MODULES="nvidia nvidia_modeset nvidia_uvm nvidia_drm";;
-    3) GPU_PKGS="mesa vulkan-radeon vulkan-icd-loader xf86-video-amdgpu nvidia-open-dkms nvidia-utils nvidia-prime nvidia-settings"; MODULES="amdgpu";;
-    *) echo "${RED}Wrong choice, install mesa${RESET}"; GPU_PKGS="mesa vulkan-radeon vulkan-icd-loader"; MODULES="amdgpu" ;;
+    1) GPU_PKGS="mesa vulkan-radeon vulkan-icd-loader"; MODULES="" ;;
+    2) GPU_PKGS="nvidia-open-dkms nvidia-utils nvidia-settings vulkan-icd-loader"; MODULES="nvidia nvidia_modeset nvidia_uvm nvidia_drm" ;;
+    3) GPU_PKGS="mesa vulkan-radeon vulkan-icd-loader xf86-video-amdgpu nvidia-open-dkms nvidia-utils nvidia-prime nvidia-settings"; MODULES="" ;;
+    *) echo "${RED}Invalid choice, installing mesa${RESET}"; GPU_PKGS="mesa vulkan-radeon vulkan-icd-loader"; MODULES="" ;;
 esac
 
 # Вибір графічного середовища
@@ -169,7 +181,7 @@ case $DE in
     3) DE_PKGS="plasma kde-applications sddm"; DE_SERVICE="sddm" ;;
     4) DE_PKGS="plasma-desktop sddm"; DE_SERVICE="sddm" ;;
     5) DE_PKGS=""; DE_SERVICE="" ;;
-    *) echo "${RED}Wrong choice, none graphics environment${RESET}"; DE_PKGS=""; DE_SERVICE="" ;;
+    *) echo "${RED}Invalid choice, no graphics environment${RESET}"; DE_PKGS=""; DE_SERVICE="" ;;
 esac
 
 # Встановлення базових пакетів
@@ -255,8 +267,48 @@ sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 # NetworkManager
 systemctl enable NetworkManager
 
-# Додаткові пакети
-# pacman -S --noconfirm firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme steam
+# Вибір додаткових пакетів
+echo "${BLUE}=== Install additional packages? ===${RESET}"
+echo "1) Yes 2) No"
+read -p "${YELLOW}Choice: ${RESET}" INSTALL_EXTRAS
+if [ "$INSTALL_EXTRAS" == "1" ]; then
+    # Базові пакети (однакові для всіх конфігурацій)
+    pacman -S --noconfirm firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme steam
+
+    # Додаткові драйвери залежно від GPU
+    case $GPU in
+        1) # AMD
+            echo "${YELLOW}Installing AMD-specific multimedia drivers...${RESET}"
+            pacman -S --noconfirm lib32-mesa lib32-vulkan-radeon lib32-vulkan-icd-loader ffmpeg v4l-utils libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils
+            ;;
+        2) # NVIDIA
+            echo "${YELLOW}Installing NVIDIA-specific multimedia drivers...${RESET}"
+            pacman -S --noconfirm lib32-nvidia-utils lib32-vulkan-icd-loader ffmpeg v4l-utils libva lib32-libva libva-utils nvtop
+            ;;
+        3) # Гібрид AMD+NVIDIA
+            echo "${YELLOW}Installing hybrid AMD+NVIDIA multimedia drivers...${RESET}"
+            pacman -S --noconfirm lib32-mesa lib32-vulkan-radeon lib32-vulkan-icd-loader lib32-nvidia-utils ffmpeg v4l-utils libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils nvtop
+            ;;
+        *) # За замовчуванням (AMD)
+            echo "${RED}No GPU choice detected, installing AMD defaults...${RESET}"
+            pacman -S --noconfirm lib32-mesa lib32-vulkan-radeon lib32-vulkan-icd-loader ffmpeg v4l-utils libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils
+            ;;
+    esac
+fi
+
+# Створення swap-файлу
+echo "${BLUE}=== Create swap file? ===${RESET}"
+echo "1) Yes 2) No"
+read -p "${YELLOW}Choice: ${RESET}" CREATE_SWAP
+if [ "$CREATE_SWAP" == "1" ]; then
+    read -p "${YELLOW}Swap file size (e.g., 8G, default 8G): ${RESET}" SWAP_SIZE
+    SWAP_SIZE=${SWAP_SIZE:-8G}
+    fallocate -l "$SWAP_SIZE" /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo "/swapfile none swap defaults 0 0" >> /etc/fstab
+fi
 
 # Активація графічного середовища
 if [ -n "$DE_SERVICE" ]; then
