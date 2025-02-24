@@ -40,17 +40,17 @@ Before running this script, ensure you have:
 
 1. **Clone this repository**:
    ```bash
-   git clone https://github.com/yourusername/archinstall.git
+   git clone https://github.com/quinsaiz/archinstall.git
    cd archinstall
    ```
 
 2. **Make the script executable and Run**:
     ```
-    chmod +x arch.sh
+    chmod +x install.sh
     ```
 3. **Run the script**:
     ```
-    ./arch.sh
+    ./install.sh
     ```
     
     Follow the prompts to customize your installation. The script will handle the rest!
