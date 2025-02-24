@@ -1,241 +1,231 @@
+# Оновлення системного годинника
 timedatectl set-ntp true
 
-cfdisk /dev/nvme0n1
-mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
-mkfs.f2fs -f -l "home" /dev/nvme0n1p3
-mkfs.vfat /dev/nvme0n1p1
+# Створення розділів
+fdisk -l
+fdisk /dev/nvme0n1 || cfdisk /dev/nvme0n1
 
-mount -t f2fs /dev/nume0n1p2 /mnt
-mkdir -p /mnt/home
-mount -t f2fs /dev/nume0n1p3 /mnt/home
-mkdir -p /mnt/boot/efi
-mount /dev/nume0n1p1 /mnt/boot/efi
+# Форматування розділів
+mkfs.vfat -F32 /dev/nvme0n1p1
+mkfs.ext4 -L "arch" /dev/nvme0n1p2 || mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
+mkfs.ext4 -L "home" /dev/nvme0n1p3 || mkfs.f2fs -f -l "home" /dev/nvme0n1p3
 
-pacstrap -i /mnt base base-devel linux-zen linux-zen-headers linux-firmware intel-ucode iucode-tool f2fs-tools e2fsprogs nano
+# Монтування
+mount /dev/nvme0n1p2 /mnt
+mkdir -p /mnt/{home,boot/efi}
+mount /dev/nvme0n1p3 /mnt/home
+mount /dev/nvme0n1p1 /mnt/boot/efi
 
+# Встановлення основних пакетів
+pacstrap -i /mnt base base-devel linux-zen linux-zen-headers linux-firmware intel-ucode nano networkmanager
+
+# Генерація fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 
 arch-chroot /mnt
 
-ln -sf /usr/share/zoneinfo/Region/City /etc/localtime
+# Часовий пояс
+ln -sf /usr/share/zoneinfo/Europe/Kyiv /etc/localtime
 hwclock --systohc
 
-nano /etc/locale.gen
+# Локалізація
+echo "uk_UA.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
+echo "LANG=uk_UA.UTF-8" > /etc/locale.conf
+echo -e "KEYMAP=ua-utf\nFONT=UniCyr_8x16" > /etc/vconsole.conf
 
-nano /etc/locale.conf -> LANG=uk_UA.UTF-8
- or echo "LANG=uk_UA.UTF-8" | sudo tee /etc/locale.conf
- 
-nano /etc/vconsole.conf -> KEYMAP=ua-utf
-			   FONT=UniCyr_8x16
- or echo -e "KEYMAP=ua-utf\nFONT=UniCyr_8x16" | sudo tee /etc/vconsole.conf
+# Ім’я хоста
+echo "arch" > /etc/hostname
+echo -e "127.0.0.1\tlocalhost\n::1\t\tlocalhost\n127.0.1.1\tarch.localdomain arch" > /etc/hosts
 
-nano /etc/hostname -> arch
- or echo "arch" | sudo tee /etc/hostname
+# Оптимізація pacman.conf
+sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
+sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
+sed -i 's/^#Color/Color/' /etc/pacman.conf
 
-nano /etc/hosts -> 127.0.0.1	localhost
-		   ::1		localhost
-		   127.0.1.1	arch.localdomain arch
-
+# Налаштування ядра для AMD GPU
+echo "MODULES=(amdgpu)" >> /etc/mkinitcpio.conf
 mkinitcpio -P
-pacman -S grub efibootmgr dhcpcd dhclient networkmanager
+
+# Встановлення завантажувача
+pacman -S --noconfirm grub efibootmgr
 grub-install /dev/nvme0n1
+ optional nano /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
+# Паролі
 passwd
-nano /etc/sudoers
+sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 useradd -m -G wheel -s /bin/bash quinsaiz
 passwd quinsaiz
+
+# Активація NetworkManager
 systemctl enable NetworkManager
+
+# Вихід з під chroot
 exit
+
+# Розмонтування розділів та перезагрузка
 umount -R /mnt
 reboot
 
-sudo nano /etc/pacman.conf -> multilib and ParralelDownloads, Color, ILoveCandy
-sudo pacman -Syu network-manager-applet gnome
+# Встановлення gnome (авторизація з під quinsaiz)
+sudo pacman -S gnome
 sudo systemctl enable gdm
 reboot
 
-ON SYSTEM
-{ Video Driver for AMD }
-sudo pacman -S xf86-video-amdgpu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver intel-ucode libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
-{ Apps }
-sudo pacman -Syu firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion
+# У СИСТЕМІ
+# Встановлення драйверів GPU
+sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
-{ Interface }
-sudo pacman -S adw-gtk-theme
+# Встановлення базових програм
+sudo pacman -S firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
+## Встановлення тем інтерфейсу через AUR
 paru -Sy suru-plus-git vlc-materia-skin-git
 
-{ Swapfile }
+# Створення SWAP
+## swapwile
 sudo fallocate -l 8G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
-echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
-  or sudo nano /etc/fstab -> /swapfile none swap defaults 0 0
-sudo nano /etc/sysctl.d/99-sysctl.conf -> ```vm.swappiness=10
-					  vm.vfs_cache_pressure=50```
+echo "/swapfile none swap defaults 0 0" | sudo tee -a /etc/fstab
+### Налаштування swappiness
+echo -e "vm.swappiness=10\nvm.vfs_cache_pressure=50" | sudo tee /etc/sysctl.d/99-sysctl.conf
 
-{ Zram }
+## zram-generator
 sudo pacman -S zram-generator
- reboot
-sudo systemctl start systemd-zram-setup@zram0.service
+echo -e "[zram0]\nzram-size=ram\ncompression-algorithm=zstd\nswap-priority=100\nfs-type=swap" | sudo tee /etc/zram-generator.conf
+systemctl enable --now systemd-zram-setup@zram0.service
 
-sudo nano /etc/systemd/zram-generator.conf -> 
-					     ```[zram0]
-						zram-size = ram
-						compression-algorithm = zstd
-						swap-priority = 100
-						fs-type = swap```
+# Налаштування навушників (передня панель)
+alsamixer (налаштувати потрібне, зокрема включити Line та на 100)
+mkdir -p ~/.config/autostart
+echo -e "#!/bin/bash\nfor card in 0 1; do\n    amixer -c \$card sset \"Headphone\" 100% unmute 2>/dev/null || true\n    amixer -c \$card sset \"Front\" 100% unmute 2>/dev/null || true\ndone" > ~/.config/autostart/amixer.sh
+chmod +x ~/.config/autostart/amixer.sh
+echo -e "[Desktop Entry]\nName=Amixer Headphone Fix\nComment=Enable headphone front panel on startup\nExec=/home/quinsaiz/.config/autostart/amixer.sh\nType=Application\nTerminal=true\nHidden=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\nIcon=music" > ~/.config/autostart/amixer.desktop
 
+## Вміст файлів повинен бути
+### amixer.sh
+#!/bin/bash
+for card in 0 1; do
+    amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
+    amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
+done
 
-{ Headphones }
-alsamixer -> turn on headphones and set max volume Line
-cd ~/.config/autostart/
-gnome-text-editor amixer.sh -> ```#!/bin/bash
-				amixer -c 0 sset "Headphone" 100% unmute
-				amixer -c 1 sset "Headphone" 100% unmute```
-chmod +x amixer.sh
+### amixer.desktop
+[Desktop Entry]
+Name=Amixer Headphone Fix
+Comment=Enable headphone front panel on startup
+Exec=/home/quinsaiz/.config/autostart/amixer.sh
+Type=Application
+Terminal=true
+Hidden=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+Icon=music
 
-{ Pipewire }
-sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects
-sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2
- (!) https://github.com/p-chan5/EasyPulse <- easyeffect presets COPY to ~/.config/easyeffects/output
+# Налаштування звуку та еквалайзера
+## Пресети тут https://github.com/p-chan5/EasyPulse, скопіювати в ~/.config/easyeffects/output
+sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2
 
-{ Fonts }
+# Встановлення шрифтів
 sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family ttf-roboto 
-paru -Sy ttf-ms-win11-auto (AUR)
+paru -Sy ttf-ms-win11-auto
 
-{ Firewall }
+# Налаштування фаєрволу
 sudo pacman -S ufw gufw
-sudo systemctl enable ufw
-sudo systemctl start ufw
+sudo systemctl enable --now ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
- (!) optional(sudo ufw allow ssh; sudo ufw allow http; sudo ufw allow https)
 sudo ufw enable
 
-{ Paru + Pamac }
+# Встановлення paru та pamac
 sudo pacman -S --needed git
 git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin
 makepkg -sricCf
 paru -Syu pamac-aur
 
-{ Установка yay }
-sudo pacman -S --needed git
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg -si
-
-{ Зміна гучності }
+# Зміна гучності
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 
-{ Зміна розкладки }
+# Зміна розкладки
 gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
 gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
 
-{ PowerProfiles }
+# PowerProfiles
 sudo pacman -S power-profiles-daemon
-sudo systemctl enable power-profiles-daemon
-sudo systemctl start power-profiles-daemon
+sudo systemctl enable --now power-profiles-daemon
 
-{ Ігри }
-First install vkbasalt if needed on Paru or yay
+# Ігрові утиліти
 sudo pacman -S gamemode lib32-gamemode mangohud lib32-mangohud goverlay
 sudo usermod -aG gamemode $(whoami)
-paru -Sy portproton
+(налаштувати файл gamemode)
+paru -Sy portproton vkbasalt
 
-{ Steam }
+# Встановлення Steam
 sudo pacman -S steam
 low memory steam: Exec=/usr/bin/steam-runtime -silent -no-browser -quicklogin -vgui -oldtraymenu -vrdisable -nofriendsui -skipstreamingdrivers -cef-force-occlusion -cef-force-opaque-backgrounds -cef-single-process -cef-disable-gpu -no-dwrite %U
 for Dota 2: mangohud gamemoderun RADV_PERFTEST=gpl,ngg %command% -high -threads 9 -novid -processheap -nocrashdialog -nojoy -novr -no-browser -map dota +cl_clock_recvmargin_enable 0 +dota_embers 0 +map_enable_portrait_worlds 0
 
-{ zsh }
-sudo pacman -Sy zsh zsh-completions ttf-firacode-nerd
-sudo chsh -s /bin/zsh 
+# Налаштування zsh
+sudo pacman -S zsh zsh-completions ttf-firacode-nerd
+sudo chsh -s /bin/zsh
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 git clone https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
-sudo nano ~/.zshrc -> ZSH_THEME="powerlevel10k/powerlevel10k"
- auto or manual on terminal -> p10k configure
+sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="powerlevel10k/powerlevel10k"/' ~/.zshrc
 git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-sudo nano ~/.zshrc -> plugins=( git zsh-syntax-highlighting zsh-autosuggestions )
-nano ~/.nanorc -> include /usr/share/nano/*.nanorc
+sed -i 's/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions)/' ~/.zshrc
+echo "include /usr/share/nano/*.nanorc" >> ~/.nanorc
 
-{ WARP }
+# Встановлення WARP
 paru -Sy cloudflare-warp-bin
-sudo systemctl enable warp-svc
-sudo systemctl start warp-svc
+sudo systemctl enable --now warp-svc
 warp-cli registration new
 warp-cli connect
+systemctl --user mask warp-taskbar
 
-{ Extensions }
-AppIndicator, BlurMyShell,Clipboard Indictor, Dash to Dock, Tiling Assistant, Dekstop Icons NG, System Monitor, User Themes, Luminus
+# Оптимізація завантаження
+paru -Sy mkinitcpio-firmware
+sed -i 's/^HOOKS=(.*)/HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)/' /etc/mkinitcpio.conf
+echo -e "COMPRESSION=\"lz4\"\nCOMPRESSION_OPTIONS=(-9)" >> /etc/mkinitcpio.conf
+mkinitcpio -P
 
-{ Очищення Gnome від зайвих програм }
-sudo pacman -D --asdeps $(pacman -Qqg gnome)
-sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gvfs gvfs-mtp gnome-text-editor gnome-calculator evince gnome-disk-utility gnome-logs gnome-shell-extensions gnome-system-monitor loupe nautilus sushi xdg-desktop-portal-gnome xdg-desktop-portal-gnome xdg-user-dirs-gtk
-sudo pacman -Rsn $(pacman -Qqgdtt gnome)
- (!) по бажанню очищення зайвих залежностей -> sudo pacman -Rns $(pacman -Qdtq)
-
-{ Кастомне встановлення захищених зеркал }
+# Оптимізація дзеркал
 sudo pacman -S reflector
-reflector --protocol https --country Germany,Netherlands --age 6 --completion-percentage 100 --ipv4 --fastest 10 --sort score --save /etc/pacman.d/mirrorlist
+reflector --protocol https --country Germany,Netherlands --age 6 --sort rate --save /etc/pacman.d/mirrorlist
 
-{ Кастомні репозиторії під ядро CachyOS}
+# Оптимізація GRUB
+quiet mitigations=off nowatchdog pci=pcie_bus_perf noautogroup
+
+# Оптимізація fstab
+f2fs	rw,noatime,discard,background_gc=on,inline_xattr,inline_data
+ext4	rw,noatime,discard,data=ordered
+
+# Розширення, які я використовую
+AppIndicator, BlurMyShell, Clipboard Indictor, Dash to Dock, Tiling Assistant, System Monitor, User Themes
+
+# Параметр, що приховує ярлики .desktop в Огляді
+NoDisplay=true
+
+# Очищення Gnome від зайвих програм
+sudo pacman -D --asdeps $(pacman -Qqg gnome)
+sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gnome-backgrounds gvfs gvfs-mtp gnome-text-editor gnome-calculator evince gnome-disk-utility gnome-logs gnome-shell-extensions gnome-system-monitor loupe sushi xdg-desktop-portal-gnome xdg-user-dirs-gtk
+sudo pacman -Rsn $(pacman -Qqgdtt gnome)
+# Опціонально: видалення осиротілих залежностей
+sudo pacman -Rns $(pacman -Qdtq)
+
+# Кастомні репозиторії від CachyOS, бажано під їх ядро
 curl https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
 tar xvf cachyos-repo.tar.xz && cd cachyos-repo
 sudo ./cachyos-repo.sh
 
-{ mkinitcpio warning fix}
-paru -Sy mkinitcpio-firmware
-
-{ Пришвидшення загрузки }
-sudo nano /etc/mkinitcpio.conf
-HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)
-sudo mkinitcpio -P
-
-{ Параметри загрузки Grub }
-quiet mitigations=off nowatchdog page_alloc.shuffle=1 pci=pcie_bus_perf intel_idle.max_cstate=1 libahci.ignore_sss=1 noautogroup
-
-{ fstab для f2fs }
-f2fs   defaults,noatime,nodiratime,inline_xattr,inline_data,active_logs=6  0  0
-
-{ Твіки CachyOS }
+# Програми оптимізації процесів і правил
 yay -S intel-ucode ananicy-cpp cachyos-ananicy-rules irqbalance
 sudo systemctl enable --now irqbalance
 sudo systemctl enable --now ananicy-cpp     
 sudo mkinitcpio -P                          
 sudo grub-mkconfig -o /boot/grub/grub.cfg 
-
-{ Приховати ярлики в файл .desktop }
-NoDisplay=true
-
-{ Налаштування шрифта }
-sudo nano /etc/fonts/local.conf ->
-```
-<?xml version="1.0"?>
-<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
-<fontconfig>
-    <alias>
-        <family>sans-serif</family>
-        <prefer>
-            <family>Roboto</family>
-        </prefer>
-    </alias>
-    <alias>
-        <family>serif</family>
-        <prefer>
-            <family>Roboto</family>
-        </prefer>
-    </alias>
-    <alias>
-        <family>monospace</family>
-        <prefer>
-            <family>Roboto Mono</family>
-        </prefer>
-    </alias>
-</fontconfig>
-```
