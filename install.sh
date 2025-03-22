@@ -24,7 +24,7 @@ read -s -p "${YELLOW}Enter password for $USERNAME: ${RESET}" USER_PASS
 echo ""
 
 echo "${BLUE}=== Select kernel ===${RESET}"
-echo "1) linux 2) linux-zen 3) linux-lts"
+echo "1) linux; 2) linux-zen; 3) linux-lts."
 read -p "${YELLOW}Choice: ${RESET}" KERNEL
 case $KERNEL in
     1) KERNEL_PKG="linux linux-headers" ;;
@@ -148,7 +148,7 @@ else
 fi
 
 echo "${BLUE}=== Choose a GPU driver ===${RESET}"
-echo "1) AMD/Intel (mesa) 2) NVIDIA (open-driver) 3) iGPU + NVIDIA (notebook)"
+echo "1) AMD/Intel (mesa); 2) NVIDIA (open-driver); 3) iGPU + NVIDIA (notebook)."
 read -p "${YELLOW}Choice: ${RESET}" GPU
 case $GPU in
     1)
@@ -199,14 +199,15 @@ case $GPU in
 esac
 
 echo "${BLUE}=== Choose a graphics environment ===${RESET}"
-echo "1) GNOME 2) GNOME Minimal 3) KDE 4) KDE Minimal 5) None"
+echo "1) GNOME; 2) GNOME Minimal; 3) KDE; 4) KDE Minimal; 5) XFCE4; 6) None"
 read -p "${YELLOW}Choice: ${RESET}" DE
 case $DE in
     1) DE_PKGS="gnome gdm pipewire-jack"; DE_SERVICE="gdm" ;;
     2) DE_PKGS="gnome-shell gdm nautilus gnome-control-center gnome-settings-daemon gnome-session xdg-desktop-portal-gnome gvfs gvfs-mtp gnome-keyring gnome-tweaks dconf-editor gnome-terminal gnome-themes-extra gvfs-smb gvfs-nfs pipewire-jack"; DE_SERVICE="gdm" ;;
     3) DE_PKGS="plasma kde-applications sddm"; DE_SERVICE="sddm" ;;
     4) DE_PKGS="plasma-desktop sddm"; DE_SERVICE="sddm" ;;
-    5) DE_PKGS=""; DE_SERVICE="" ;;
+    5) DE_PKGS="xfce4 xfce4-goodies lightdm"; DE_SERVICE="lightdm" ;;
+    6) DE_PKGS=""; DE_SERVICE="" ;;
     *) echo "${RED}Invalid choice, no graphics environment${RESET}"; DE_PKGS=""; DE_SERVICE="" ;;
 esac
 
@@ -271,8 +272,8 @@ grub-mkconfig -o /boot/grub/grub.cfg
 if [ "$GPU" == "3" ]; then
     mkdir -p /etc/X11/xorg.conf.d
     echo -e 'Section "OutputClass"\n    Identifier "nvidia"\n    MatchDriver "nvidia-drm"\n    Driver "nvidia"\n    Option "PrimaryGPU" "no"\nEndSection' > /etc/X11/xorg.conf.d/10-nvidia-drm-outputclass.conf
-    # echo "${GREEN}Make sure that /etc/X11/xorg.conf.d/10-nvidia-drm-outputclass.conf has the correct contents:${RESET}"
-    # cat /etc/X11/xorg.conf.d/10-nvidia-drm-outputclass.conf
+    #echo "${GREEN}Make sure that /etc/X11/xorg.conf.d/10-nvidia-drm-outputclass.conf has the correct contents:${RESET}"
+    #cat /etc/X11/xorg.conf.d/10-nvidia-drm-outputclass.conf
 fi
 
 echo "root:$ROOT_PASS" | chpasswd
@@ -286,7 +287,12 @@ echo "${BLUE}=== Install additional packages? ===${RESET}"
 echo "1) Yes 2) No"
 read -p "${YELLOW}Choice: ${RESET}" INSTALL_EXTRAS
 if [ "$INSTALL_EXTRAS" == "1" ]; then
-    pacman -S --noconfirm firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme steam
+    pacman -S --noconfirm firefox firefox-i18n-uk qbittorrent vlc neofetch btop bash-completion steam
+
+    if [ "$DE" == "1" ] || [ "$DE" == "2" ]; then
+        echo "${YELLOW}Installing GNOME-specific additional packages...${RESET}"
+        pacman -S --noconfirm gnome-browser-connector gnome-tweaks adw-gtk-theme
+    fi
 
     case $GPU in
         1)
@@ -341,7 +347,7 @@ if [ "$CREATE_SWAP" == "1" ]; then
             COUNT=$(echo "$SWAP_SIZE" | awk '{print $1 * 1024}')
         fi
         dd if=/dev/zero of=/swapfile bs=1M count=$COUNT status=progress
-        # fallocate -l "$SWAP_SIZE" /swapfile
+        #fallocate -l "$SWAP_SIZE" /swapfile
         chmod 600 /swapfile
         mkswap /swapfile
         swapon /swapfile

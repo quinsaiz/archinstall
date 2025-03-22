@@ -14,7 +14,7 @@ Welcome to the Arch Linux Automated Installation Script repository! This project
   - Validates partition sizes and available space to prevent errors during setup.
 
 - **Flexible Installation Options**:
-  - Choose between different kernel versions (e.g., LTS, Zen, etc.).
+  - Choose between different kernel versions (e.g., Zen, LTS, etc.).
   - Create a swap file with customizable size.
   - Optional creation of a home partition or allocation of all remaining space to the root partition.
 
@@ -33,7 +33,7 @@ Welcome to the Arch Linux Automated Installation Script repository! This project
 Before running this script, ensure you have:
 
 - A system with an Internet connection.
-- A UEFI or BIOS system.
+- A UEFI or BIOS (later) system.
 - A desire to install Arch Linux!
 
 ## Installation
@@ -53,7 +53,7 @@ Before running this script, ensure you have:
     ./install.sh
     ```
     
-    Follow the prompts to customize your installation. The script will handle the rest!
+Follow the prompts to customize your installation. The script will handle the rest!
 
 ## Usage
 
@@ -79,10 +79,10 @@ The script will then proceed to partition, format, and mount your selected disk,
     - Choose between `ext4` or `f2fs` for the root partition.
 
 3. **Kernel Selection**:
-    - Choose between `linux`, `linux-lts`, or `linux-zen`.
+    - Choose between `linux`, `linux-zen`, or `linux-lts`.
 
 4. **Desktop Environment**:
-    - Choose between `gnome`, `kde`, or skip.
+    - Choose between `GNOME`, `KDE Plasma`, `XFCE4` or skip.
 
 ## Contributing
 
