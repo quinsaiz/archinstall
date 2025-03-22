@@ -91,7 +91,6 @@ makepkg -sricCf
 paru -Syu pamac-aur
 
 # Налаштування звуку та еквалайзера
-## Пресети тут https://github.com/p-chan5/EasyPulse, скопіювати в ~/.config/easyeffects/output
 sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2
 
 # Встановлення шрифтів
@@ -149,7 +148,7 @@ sudo pacman -S reflector
 reflector --protocol https --country Germany,Netherlands --age 6 --sort rate --save /etc/pacman.d/mirrorlist
 
 # Оптимізація GRUB
-quiet mitigations=off nowatchdog pci=pcie_bus_perf noautogroup
+quiet nowatchdog noautogroup mitigations=off pci=pcie_bus_perf
 
 # Зміна гучності
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
@@ -162,8 +161,11 @@ gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<
 f2fs	rw,noatime,discard,background_gc=on,inline_xattr,inline_data
 ext4	rw,noatime,discard,data=ordered
 
+# Активація щотижневого TRIM
+sudo systemctl enable --now fstrim.timer
+
 # Створення SWAP
-## swapwile
+## swapfile
 sudo fallocate -l 8G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
@@ -174,7 +176,7 @@ echo -e "vm.swappiness=10\nvm.vfs_cache_pressure=50" | sudo tee /etc/sysctl.d/99
 
 ## zram-generator
 sudo pacman -S zram-generator
-echo -e "[zram0]\nzram-size=ram\ncompression-algorithm=zstd\nswap-priority=100\nfs-type=swap" | sudo tee /etc/zram-generator.conf
+echo -e "[zram0]\nzram-size = min(ram / 2, 4096)\ncompression-algorithm = zstd" > /etc/systemd/zram-generator.conf
 systemctl enable --now systemd-zram-setup@zram0.service
 
 # Налаштування навушників (передня панель)
@@ -185,7 +187,7 @@ chmod +x ~/.config/autostart/amixer.sh
 echo -e "[Desktop Entry]\nName=Amixer Headphone Fix\nComment=Enable headphone front panel on startup\nExec=/home/quinsaiz/.config/autostart/amixer.sh\nType=Application\nTerminal=true\nHidden=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\nIcon=music" > ~/.config/autostart/amixer.desktop
 
 ## Вміст файлу amixer.sh повинен бути
-#!/bin/bash
+#}!/bin/bash
 for card in 0 1; do
     amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
     amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
@@ -201,7 +203,7 @@ NoDisplay=true
 sudo pacman -D --asdeps $(pacman -Qqg gnome)
 sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gnome-backgrounds gvfs gvfs-mtp gnome-text-editor gnome-calculator evince gnome-disk-utility gnome-logs gnome-shell-extensions gnome-system-monitor loupe sushi xdg-desktop-portal-gnome xdg-user-dirs-gtk
 sudo pacman -Rsn $(pacman -Qqgdtt gnome)
-# Опціонально: видалення осиротілих залежностей
+## Опціонально: видалення осиротілих залежностей
 sudo pacman -Rns $(pacman -Qdtq)
 
 # Кастомні репозиторії від CachyOS, бажано під їх ядро
