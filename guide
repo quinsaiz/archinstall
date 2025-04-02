@@ -29,9 +29,9 @@ ln -sf /usr/share/zoneinfo/Europe/Kyiv /etc/localtime
 hwclock --systohc
 
 # Локалізація
-echo "uk_UA.UTF-8 UTF-8" >> /etc/locale.gen
+echo -e "en_US.UTF-8 UTF-8\nuk_UA.UTF-8 UTF-8" | sudo tee -a /etc/locale.gen
 locale-gen
-echo "LANG=uk_UA.UTF-8" > /etc/locale.conf
+echo "LANG=uk_UA.UTF-8" > /etc/locale.conf # або en_US.UTF-8
 echo -e "KEYMAP=ua-utf\nFONT=UniCyr_8x16" > /etc/vconsole.conf
 
 # Ім’я хоста
@@ -42,10 +42,6 @@ echo -e "127.0.0.1\tlocalhost\n::1\t\tlocalhost\n127.0.1.1\tarch.localdomain arc
 sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
 sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
 sed -i 's/^#Color/Color/' /etc/pacman.conf
-
-# Налаштування ядра для AMD GPU
-echo "MODULES=(amdgpu)" >> /etc/mkinitcpio.conf
-mkinitcpio -P
 
 # Встановлення завантажувача (/etc/default/grub можна ще встановити os-prober)
 pacman -S --noconfirm grub efibootmgr
@@ -124,11 +120,16 @@ sudo pacman -S zsh zsh-completions ttf-firacode-nerd
 sudo chsh -s /bin/zsh
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 git clone https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
-sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="powerlevel10k/powerlevel10k"/' ~/.zshrc
+sed -i 's#ZSH_THEME="robbyrussell"#ZSH_THEME="powerlevel10k/powerlevel10k"#' ~/.zshrc
 git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 sed -i 's/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions)/' ~/.zshrc
 echo "include /usr/share/nano/*.nanorc" >> ~/.nanorc
+## Фікс для tty
+if [ "$(tput colors)" -ne 256 ]; then
+  ZSH_THEME=""
+  PROMPT='%F{green}%n@%m%f %F{yellow}%~%f $ '
+fi
 
 # Встановлення WARP
 paru -Sy cloudflare-warp-bin
