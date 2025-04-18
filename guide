@@ -67,7 +67,7 @@ reboot
 # Встановлення gnome (авторизація з під quinsaiz)
 sudo pacman -S gnome
 sudo systemctl enable gdm
-reboot
+sudo reboot
 
 
 # У СИСТЕМІ 
@@ -80,7 +80,7 @@ sudo pacman -S firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-brows
 paru -Sy suru-plus-git vlc-materia-skin-git
 
 # Встановлення paru та pamac
-sudo pacman -S --needed git
+sudo pacman -S git
 git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin
 makepkg -sricCf
@@ -126,7 +126,9 @@ git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-m
 sed -i 's/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions)/' ~/.zshrc
 echo "include /usr/share/nano/*.nanorc" >> ~/.nanorc
 ## Фікс для tty
-if [ "$(tput colors)" -ne 256 ]; then
+if [ "$(tput colors)" -ge 256 ]; then
+  ZSH_THEME="powerlevel10k/powerlevel10k"
+else
   ZSH_THEME=""
   PROMPT='%F{green}%n@%m%f %F{yellow}%~%f $ '
 fi
