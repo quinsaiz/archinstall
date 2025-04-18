@@ -7,8 +7,11 @@ fdisk /dev/nvme0n1 || cfdisk /dev/nvme0n1
 
 # Форматування розділів
 mkfs.vfat -F32 /dev/nvme0n1p1
-mkfs.ext4 -L "arch" /dev/nvme0n1p2 || mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
-mkfs.ext4 -L "home" /dev/nvme0n1p3 || mkfs.f2fs -f -l "home" /dev/nvme0n1p3
+mkfs.ext4 -L "arch" /dev/nvme0n1p2
+mkfs.ext4 -L "home" /dev/nvme0n1p3
+## Якщо обираємо f2fs
+mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
+mkfs.f2fs -f -l "home" /dev/nvme0n1p3
 
 # Монтування
 mount /dev/nvme0n1p2 /mnt
@@ -43,8 +46,8 @@ sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc
 sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
 sed -i 's/^#Color/Color/' /etc/pacman.conf
 
-# Встановлення завантажувача (/etc/default/grub можна ще встановити os-prober)
-pacman -S --noconfirm grub efibootmgr
+# Встановлення завантажувача
+pacman -S grub efibootmgr os-prober # os-prober для dual boot
 grub-install /dev/nvme0n1
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -70,14 +73,13 @@ sudo systemctl enable gdm
 sudo reboot
 
 
-# У СИСТЕМІ 
+//===== У СИСТЕМІ =====//
 # Встановлення драйверів GPU
 sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
 # Встановлення базових програм
-sudo pacman -S firefox firefox-i18n-uk qbittorrent vlc neofetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
-## Встановлення тем інтерфейсу через AUR
-paru -Sy suru-plus-git vlc-materia-skin-git
+sudo pacman -S firefox firefox-i18n-uk transmission-gtk fastfetch btop amdgpu_top gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
+paru -S suru-plus-git
 
 # Встановлення paru та pamac
 sudo pacman -S git
@@ -91,7 +93,7 @@ sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easy
 
 # Встановлення шрифтів
 sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family ttf-roboto 
-paru -Sy ttf-ms-win11-auto
+paru -S ttf-ms-win11-auto
 
 # Налаштування фаєрволу
 sudo pacman -S ufw gufw
@@ -107,8 +109,7 @@ sudo systemctl enable --now power-profiles-daemon
 # Ігрові утиліти
 sudo pacman -S gamemode lib32-gamemode mangohud lib32-mangohud goverlay
 sudo usermod -aG gamemode $(whoami)
-(налаштувати файл gamemode)
-paru -Sy portproton vkbasalt
+paru -S portproton vkbasalt
 
 # Встановлення Steam
 sudo pacman -S steam
@@ -134,17 +135,16 @@ else
 fi
 
 # Встановлення WARP
-paru -Sy cloudflare-warp-bin
+paru -S cloudflare-warp-bin
 sudo systemctl enable --now warp-svc
 warp-cli registration new
-warp-cli connect
 systemctl --user mask warp-taskbar
 
 # Оптимізація завантаження
-paru -Sy mkinitcpio-firmware
+paru -S mkinitcpio-firmware
 sed -i 's/^HOOKS=(.*)/HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)/' /etc/mkinitcpio.conf
 echo -e "COMPRESSION=\"lz4\"\nCOMPRESSION_OPTIONS=(-9)" >> /etc/mkinitcpio.conf
-mkinitcpio -P
+sudo mkinitcpio -P
 
 # Оптимізація дзеркал
 sudo pacman -S reflector
@@ -161,8 +161,8 @@ gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt
 gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
 
 # Оптимізація fstab
-f2fs	rw,noatime,discard,background_gc=on,inline_xattr,inline_data
 ext4	rw,noatime,discard,data=ordered
+f2fs	rw,noatime,discard,background_gc=on,inline_xattr,inline_data
 
 # Активація щотижневого TRIM
 sudo systemctl enable --now fstrim.timer
@@ -190,11 +190,11 @@ chmod +x ~/.config/autostart/amixer.sh
 echo -e "[Desktop Entry]\nName=Amixer Headphone Fix\nComment=Enable headphone front panel on startup\nExec=/home/quinsaiz/.config/autostart/amixer.sh\nType=Application\nTerminal=true\nHidden=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\nIcon=music" > ~/.config/autostart/amixer.desktop
 
 ## Вміст файлу amixer.sh повинен бути
-#}!/bin/bash
+```!/bin/bash
 for card in 0 1; do
     amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
     amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
-done
+done```
 
 # Розширення, які я використовую
 AppIndicator, BlurMyShell, Clipboard Indictor, Dash to Dock, Tiling Assistant, System Monitor, User Themes
