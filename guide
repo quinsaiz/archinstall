@@ -67,23 +67,23 @@ exit
 umount -R /mnt
 reboot
 
-# Встановлення gnome (авторизація з під quinsaiz)
+//===== [У СИСТЕМІ] =====//
+# Встановлення gnome (авторизація з під користувача)
 sudo pacman -S gnome
 sudo systemctl enable gdm
 sudo reboot
 
-
-//===== У СИСТЕМІ =====//
-# Встановлення драйверів AMD GPU
-sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
-
 # Встановлення драйверів NVIDIA GPU
 sudo pacman -Syu nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader opencl-nvidia lib32-opencl-nvidia cuda libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
-
 printf '%s\n' 'options nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp nvidia_drm.modeset=1 nvidia_drm.fbdev=1' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
 printf '%s\n' 'blacklist i2c_nvidia_gpu' | sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null
+printf '%s\n' 'blacklist nouveau' 'options nouveau modeset=0' | sudo tee /etc/modprobe.d/blacklist-nouveau.conf > /dev/null
 sudo sed -i '/^MODULES=/ s/)$/nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
 sudo mkinitcpio -P
+sudo cat /proc/driver/nvidia/params (для перевірки)
+
+# Встановлення драйверів AMD GPU
+sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
 # Встановлення базових програм
 sudo pacman -S firefox firefox-i18n-uk fastfetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
@@ -108,6 +108,7 @@ sudo pacman -S ufw gufw
 sudo systemctl enable --now ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
+sudo ufw allow from 192.168.0.0/24 to any port 5173 proto tcp (щоб відкрити порт)
 sudo ufw enable
 
 # PowerProfiles
@@ -145,11 +146,11 @@ printf '%s\n' \
   '  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "' \
   'fi' \
   >> ~/.zshrc
-
 # Встановлення dnsmasq
 sudo pacman -S dnsmasq
 printf '%s\n' 'cache-size=1000' 'listen-address=127.0.0.1' | sudo tee -a /etc/dnsmasq.conf > /dev/null
 printf '%s\n' '[main]' 'dns=dnsmasq' | sudo tee /etc/NetworkManager/NetworkManager.conf > /dev/null
+sudo systemctl restart NetworkManager
 
 # Встановлення WARP
 paru -S cloudflare-warp-bin
@@ -226,14 +227,14 @@ sudo pacman -Rsn $(pacman -Qqgdtt gnome)
 ## Опціонально: видалення осиротілих залежностей
 sudo pacman -Rns $(pacman -Qdtq)
 
+# Програми оптимізації процесів і правил (для ігор бажано лише gamemode)
+paru -S ananicy-cpp cachyos-ananicy-rules irqbalance
+sudo systemctl enable --now irqbalance
+sudo systemctl enable --now ananicy-cpp
+sudo mkinitcpio -P
+
+
 # Кастомні репозиторії від CachyOS, бажано під їх ядро
 curl https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
 tar xvf cachyos-repo.tar.xz && cd cachyos-repo
 sudo ./cachyos-repo.sh
-
-# Програми оптимізації процесів і правил
-paru -S intel-ucode ananicy-cpp cachyos-ananicy-rules irqbalance
-sudo systemctl enable --now irqbalance
-sudo systemctl enable --now ananicy-cpp     
-sudo mkinitcpio -P                          
-sudo grub-mkconfig -o /boot/grub/grub.cfg 
