@@ -74,11 +74,19 @@ sudo reboot
 
 
 //===== У СИСТЕМІ =====//
-# Встановлення драйверів GPU
+# Встановлення драйверів AMD GPU
 sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
+# Встановлення драйверів NVIDIA GPU
+sudo pacman -Syu nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader opencl-nvidia lib32-opencl-nvidia cuda libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
+
+printf '%s\n' 'options nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp nvidia_drm.modeset=1 nvidia_drm.fbdev=1' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+printf '%s\n' 'blacklist i2c_nvidia_gpu' | sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null
+sudo sed -i '/^MODULES=/ s/)$/nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+sudo mkinitcpio -P
+
 # Встановлення базових програм
-sudo pacman -S firefox firefox-i18n-uk transmission-gtk fastfetch btop amdgpu_top gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
+sudo pacman -S firefox firefox-i18n-uk fastfetch btop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
 paru -S suru-plus-git
 
 # Встановлення paru та pamac
@@ -114,7 +122,7 @@ paru -S portproton vkbasalt
 # Встановлення Steam
 sudo pacman -S steam
 low memory steam: Exec=/usr/bin/steam-runtime -silent -no-browser -quicklogin -vgui -oldtraymenu -vrdisable -nofriendsui -skipstreamingdrivers -cef-force-occlusion -cef-force-opaque-backgrounds -cef-single-process -cef-disable-gpu -no-dwrite %U
-for Dota 2: mangohud gamemoderun RADV_PERFTEST=gpl,ngg %command% -high -threads 9 -novid -processheap -nocrashdialog -nojoy -novr -no-browser -map dota +cl_clock_recvmargin_enable 0 +dota_embers 0 +map_enable_portrait_worlds 0
+for Dota 2: mangohud gamemoderun RADV_PERFTEST=gpl,ngg %command% -high -threads 13 -novid -processheap -nocrashdialog -nojoy -novr -no-browser -map dota +cl_clock_recvmargin_enable 0 +dota_embers 0 +map_enable_portrait_worlds 0
 
 # Налаштування zsh
 sudo pacman -S zsh zsh-completions ttf-firacode-nerd
@@ -125,14 +133,23 @@ sed -i 's#ZSH_THEME="robbyrussell"#ZSH_THEME="powerlevel10k/powerlevel10k"#' ~/.
 git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 sed -i 's/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions)/' ~/.zshrc
-echo "include /usr/share/nano/*.nanorc" >> ~/.nanorc
+printf '%s\n' 'include /usr/share/nano/*.nanorc' >> ~/.nanorc 2>/dev/null
+
 ## Фікс для tty
-if [ "$(tput colors)" -ge 256 ]; then
-  ZSH_THEME="powerlevel10k/powerlevel10k"
-else
-  ZSH_THEME=""
-  PROMPT='%F{green}%n@%m%f %F{yellow}%~%f $ '
-fi
+sed -i 's/^\s*ZSH_THEME=/\t# &/' ~/.zshrc
+printf '%s\n' \
+  'if [ "$(tput colors)" -ge 256 ]; then' \
+  '  ZSH_THEME="powerlevel10k/powerlevel10k"' \
+  'else' \
+  '  ZSH_THEME=""' \
+  '  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "' \
+  'fi' \
+  >> ~/.zshrc
+
+# Встановлення dnsmasq
+sudo pacman -S dnsmasq
+printf '%s\n' 'cache-size=1000' 'listen-address=127.0.0.1' | sudo tee -a /etc/dnsmasq.conf > /dev/null
+printf '%s\n' '[main]' 'dns=dnsmasq' | sudo tee /etc/NetworkManager/NetworkManager.conf > /dev/null
 
 # Встановлення WARP
 paru -S cloudflare-warp-bin
@@ -142,8 +159,8 @@ systemctl --user mask warp-taskbar
 
 # Оптимізація завантаження
 paru -S mkinitcpio-firmware
-sed -i 's/^HOOKS=(.*)/HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)/' /etc/mkinitcpio.conf
-echo -e "COMPRESSION=\"lz4\"\nCOMPRESSION_OPTIONS=(-9)" >> /etc/mkinitcpio.conf
+sudo sed -i 's/^HOOKS=(.*)/HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)/' /etc/mkinitcpio.conf
+printf '%s\n' 'COMPRESSION="lz4"' 'COMPRESSION_OPTIONS=(-9)' | sudo tee -a /etc/mkinitcpio.conf > /dev/null
 sudo mkinitcpio -P
 
 # Оптимізація дзеркал
@@ -151,7 +168,8 @@ sudo pacman -S reflector
 reflector --protocol https --country Germany,Netherlands --age 6 --sort rate --save /etc/pacman.d/mirrorlist
 
 # Оптимізація GRUB
-quiet nowatchdog noautogroup mitigations=off pci=pcie_bus_perf
+sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet nowatchdog mitigations=off nmi_watchdog=0 loglevel=3 rd.systemd.show_status=auto rd.udev.log_priority=3"/' /etc/default/grub
+sudo grub-mkconfig -o /boot/grub/grub.cfg
 
 # Зміна гучності
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
@@ -161,8 +179,8 @@ gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt
 gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
 
 # Оптимізація fstab
-ext4	rw,noatime,discard,data=ordered
-f2fs	rw,noatime,discard,background_gc=on,inline_xattr,inline_data
+ext4   rw,noatime,nodiscard,commit=60,data=ordered
+f2fs   rw,noatime,nodiscard,gc_merge,inline_xattr,inline_data,compress_algorithm=zstd
 
 # Активація щотижневого TRIM
 sudo systemctl enable --now fstrim.timer
@@ -173,21 +191,20 @@ sudo fallocate -l 8G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
-echo "/swapfile none swap defaults 0 0" | sudo tee -a /etc/fstab
-### Налаштування swappiness
-echo -e "vm.swappiness=10\nvm.vfs_cache_pressure=50" | sudo tee /etc/sysctl.d/99-sysctl.conf
+printf '%s\n' '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab > /dev/null
+printf '%s\n' 'vm.swappiness=10' 'vm.vfs_cache_pressure=50' | sudo tee /etc/sysctl.d/99-sysctl.conf > /dev/null
 
 ## zram-generator
 sudo pacman -S zram-generator
-echo -e "[zram0]\nzram-size = min(ram / 2, 4096)\ncompression-algorithm = zstd" > /etc/systemd/zram-generator.conf
+printf '%s\n' '[zram0]' 'zram-size = min(ram / 2, 4096)' 'compression-algorithm = zstd' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
 systemctl enable --now systemd-zram-setup@zram0.service
 
 # Налаштування навушників (передня панель)
 alsamixer (налаштувати потрібне, зокрема включити Line та на 100)
 mkdir -p ~/.config/autostart
-echo -e "#!/bin/bash\nfor card in 0 1; do\n    amixer -c \$card sset \"Headphone\" 100% unmute 2>/dev/null || true\n    amixer -c \$card sset \"Front\" 100% unmute 2>/dev/null || true\ndone" > ~/.config/autostart/amixer.sh
+printf '%s\n' '#!/bin/bash' 'for card in 0 1; do' '    amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true' '    amixer -c $card sset "Front" 100% unmute 2>/dev/null || true' 'done' > ~/.config/autostart/amixer.sh
 chmod +x ~/.config/autostart/amixer.sh
-echo -e "[Desktop Entry]\nName=Amixer Headphone Fix\nComment=Enable headphone front panel on startup\nExec=/home/quinsaiz/.config/autostart/amixer.sh\nType=Application\nTerminal=true\nHidden=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\nIcon=music" > ~/.config/autostart/amixer.desktop
+printf '%s\n' '[Desktop Entry]' 'Name=Amixer Headphone Fix' 'Comment=Enable headphone front panel on startup' 'Exec=/home/quinsaiz/.config/autostart/amixer.sh' 'Type=Application' 'Terminal=true' 'Hidden=false' 'StartupNotify=false' 'X-GNOME-Autostart-enabled=true' 'Icon=music' > ~/.config/autostart/amixer.desktop
 
 ## Вміст файлу amixer.sh повинен бути
 ```!/bin/bash
