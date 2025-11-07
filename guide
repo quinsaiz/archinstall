@@ -49,7 +49,7 @@ sed -i 's/^ParallelDownloads = 5/ParallelDownloads = 10/' /etc/pacman.conf
 sed -i 's/^#Color/Color/' /etc/pacman.conf
 
 # Встановлення завантажувача
-pacman -S grub efibootmgr os-prober # os-prober для dual boot
+pacman -Sy grub efibootmgr os-prober # os-prober для dual boot
 grub-install /dev/nvme0n1
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -177,13 +177,12 @@ systemctl --user mask warp-taskbar
 
 # Оптимізація завантаження
 paru -S mkinitcpio-firmware
-sudo sed -i 's/^HOOKS=(.*)/HOOKS=(systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)/' /etc/mkinitcpio.conf
 printf '%s\n' 'COMPRESSION="lz4"' 'COMPRESSION_OPTIONS=(-9)' | sudo tee -a /etc/mkinitcpio.conf > /dev/null
 sudo mkinitcpio -P
 
 
 # Оптимізація GRUB
-sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet nowatchdog mitigations=off nmi_watchdog=0 loglevel=3 rd.systemd.show_status=auto rd.udev.log_priority=3"/' /etc/default/grub
+sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet nmi_watchdog=0 mitigations=off"/' /etc/default/grub
 sudo grub-mkconfig -o /boot/grub/grub.cfg
 
 
