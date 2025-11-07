@@ -246,6 +246,10 @@ AppIndicator, BlurMyShell, Clipboard Indictor, Dash to Dock, Tiling Assistant, S
 NoDisplay=true
 
 
+# Для кешування нових іконок
+sudo gtk-update-icon-cache -f -t /usr/share/icons/"icons folder"
+
+
 # Очищення Gnome від зайвих програм
 sudo pacman -D --asdeps $(pacman -Qqg gnome)
 sudo pacman -D --asexplicit gnome-shell mutter gdm gnome-control-center gnome-console nautilus gnome-session gnome-settings-daemon gnome-backgrounds gvfs gvfs-mtp gnome-text-editor gnome-calculator evince gnome-disk-utility gnome-logs gnome-shell-extensions gnome-system-monitor loupe sushi xdg-desktop-portal-gnome xdg-user-dirs-gtk
