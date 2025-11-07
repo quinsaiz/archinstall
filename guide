@@ -201,10 +201,10 @@ gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<
 
 
 # Оптимізація fstab
-ext4   rw,noatime,nodiscard,commit=60,data=ordered
-f2fs   rw,noatime,nodiscard,gc_merge,inline_xattr,inline_data,compress_algorithm=zstd
+ext4   rw,noatime,commit=60,data=ordered
+f2fs   rw,noatime,gc_merge,inline_xattr,inline_data,compress_algorithm=zstd
 
-# Активація щотижневого TRIM
+# Активація щотижневого TRIM ext4
 sudo systemctl enable --now fstrim.timer
 
 
@@ -219,7 +219,7 @@ printf '%s\n' 'vm.swappiness=10' 'vm.vfs_cache_pressure=50' | sudo tee /etc/sysc
 
 ## zram-generator
 sudo pacman -S zram-generator
-printf '%s\n' '[zram0]' 'zram-size = min(ram / 2, 4096)' 'compression-algorithm = zstd' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
+printf '%s\n' '[zram0]' 'zram-size = ram / 2' 'compression-algorithm = lz4' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
 systemctl enable --now systemd-zram-setup@zram0.service
 
 
