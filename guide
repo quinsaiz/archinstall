@@ -181,7 +181,7 @@ sudo mkinitcpio -P
 
 
 # Оптимізація GRUB
-sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet nmi_watchdog=0 mitigations=off"/' /etc/default/grub
+sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet mitigations=off nmi_watchdog=0 nowatchdog"/' /etc/default/grub
 sudo grub-mkconfig -o /boot/grub/grub.cfg
 
 
@@ -218,8 +218,7 @@ printf '%s\n' 'vm.swappiness=10' 'vm.vfs_cache_pressure=50' | sudo tee /etc/sysc
 
 ## zram-generator
 sudo pacman -S zram-generator
-printf '%s\n' '[zram0]' 'zram-size = ram / 2' 'compression-algorithm = lz4' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
-systemctl enable systemd-zram-setup@zram0.service
+printf '%s\n' '[zram0]' 'zram-size = ram / 2' 'compression-algorithm = lz4' 'swap-priority = 100' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
 
 
 # Налаштування навушників (передня панель)
