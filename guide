@@ -11,7 +11,7 @@ mkfs.vfat -F32 /dev/nvme0n1p1
 mkfs.ext4 -L "arch" /dev/nvme0n1p2
 mkfs.ext4 -L "home" /dev/nvme0n1p3
 
-## Якщо обираємо f2fs
+## f2fs
 mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
 mkfs.f2fs -f -l "home" /dev/nvme0n1p3
 
@@ -22,7 +22,7 @@ mount /dev/nvme0n1p3 /mnt/home
 mount /dev/nvme0n1p1 /mnt/boot/efi
 
 # Встановлення основних пакетів
-pacstrap -i /mnt base base-devel linux-zen linux-zen-headers linux-firmware intel-ucode nano networkmanager
+pacstrap -i /mnt base base-devel linux-zen linux-zen-headers linux-firmware amd-ucode nano networkmanager (або intel-ucode)
 
 # Генерація fstab
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -43,13 +43,8 @@ echo -e "KEYMAP=ua-utf\nFONT=UniCyr_8x16" > /etc/vconsole.conf
 echo "arch" > /etc/hostname
 echo -e "127.0.0.1\tlocalhost\n::1\t\tlocalhost\n127.0.1.1\tarch.localdomain arch" > /etc/hosts
 
-# Оптимізація pacman.conf
-sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
-sed -i 's/^ParallelDownloads = 5/ParallelDownloads = 10/' /etc/pacman.conf
-sed -i 's/^#Color/Color/' /etc/pacman.conf
-
 # Встановлення завантажувача
-pacman -Sy grub efibootmgr os-prober # os-prober для dual boot
+pacman -S grub efibootmgr os-prober
 grub-install /dev/nvme0n1
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -70,14 +65,15 @@ umount -R /mnt
 reboot
 
 //===== [У СИСТЕМІ] =====//
-# Встановлення gnome (авторизація з під користувача)
-sudo pacman -S gnome
-sudo systemctl enable gdm
-sudo reboot
+# Оптимізація pacman.conf
+sudo sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
+sudo sed -i 's/^ParallelDownloads = 5/ParallelDownloads = 10/' /etc/pacman.conf
+sudo sed -i 's/^#Color/Color/' /etc/pacman.conf
+sudo pacman -Sy
 
 
 # Встановлення драйверів NVIDIA GPU
-sudo pacman -Syu nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader opencl-nvidia lib32-opencl-nvidia cuda libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
+sudo pacman -S nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader opencl-nvidia lib32-opencl-nvidia cuda libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
 printf '%s\n' 'options nvidia nvidia_drm.modeset=1 nvidia_drm.fbdev=1 NVreg_PreserveVideoMemoryAllocations=1 nvidia.NVreg_EnableGpuFirmware=0 NVreg_TemporaryFilePath=/var/tmp' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
 printf '%s\n' 'blacklist i2c_nvidia_gpu' | sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null
 printf '%s\n' 'blacklist nouveau' 'options nouveau modeset=0' | sudo tee /etc/modprobe.d/blacklist-nouveau.conf > /dev/null
@@ -88,6 +84,12 @@ sudo cat /proc/driver/nvidia/params (для перевірки)
 
 # Встановлення драйверів AMD GPU
 sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
+
+
+# Встановлення Gnome
+sudo pacman -S gnome
+sudo systemctl enable gdm
+sudo reboot
 
 
 # Встановлення базових програм
