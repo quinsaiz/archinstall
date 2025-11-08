@@ -81,7 +81,6 @@ sudo sed -i '/^MODULES=/ s/)$/nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /et
 sudo mkinitcpio -P
 sudo cat /proc/driver/nvidia/params (для перевірки)
 
-
 # Встановлення драйверів AMD GPU
 sudo pacman -Syu mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 
@@ -152,15 +151,13 @@ sed -i 's/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions
 printf '%s\n' 'include /usr/share/nano/*.nanorc' >> ~/.nanorc 2>/dev/null
 
 ## Фікс для tty
-sed -i 's/^\s*ZSH_THEME=/\t# &/' ~/.zshrc
-printf '%s\n' \
-  'if [ "$(tput colors)" -ge 256 ]; then' \
-  '  ZSH_THEME="powerlevel10k/powerlevel10k"' \
-  'else' \
-  '  ZSH_THEME=""' \
-  '  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "' \
-  'fi' \
-  >> ~/.zshrc
+sed -i '/^ZSH_THEME=/c\
+if [ "$(tput colors)" -ge 256 ]; then\
+  ZSH_THEME="powerlevel10k/powerlevel10k"\
+else\
+  ZSH_THEME=""\
+  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "\
+fi' ~/.zshrc
 
 
 # Встановлення dnsmasq
@@ -222,7 +219,7 @@ printf '%s\n' 'vm.swappiness=10' 'vm.vfs_cache_pressure=50' | sudo tee /etc/sysc
 ## zram-generator
 sudo pacman -S zram-generator
 printf '%s\n' '[zram0]' 'zram-size = ram / 2' 'compression-algorithm = lz4' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
-systemctl enable --now systemd-zram-setup@zram0.service
+systemctl enable systemd-zram-setup@zram0.service
 
 
 # Налаштування навушників (передня панель)
