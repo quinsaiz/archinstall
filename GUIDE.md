@@ -4,7 +4,7 @@
 
 ### Update the system clock
 ```bash
-timedatectl
+timedatectl set-ntp true
 ```
 ### Connect to the internet
 ```bash
@@ -188,7 +188,7 @@ sudo sed -i '/^MODULES=/ s/)$/nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /et
 
 sudo mkinitcpio -P
 
-sudo cat /proc/driver/nvidia/params # for verification
+sudo cat /proc/driver/nvidia/params # for verification of installation
 ```
 
 ### AMD GPU
@@ -198,7 +198,7 @@ sudo pacman -S mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
 sudo pacman -S vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
 ```
 
-### Gnome
+### GNOME
 ```bash
 sudo pacman -S gnome
 
@@ -229,7 +229,7 @@ paru -Syu pamac-aur
 ```bash
 sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects
 
-sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2 # for equalizer
+sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2 # plugins for equalizer
 ```
 
 ### Installation fonts
@@ -325,7 +325,7 @@ warp-cli registration new
 systemctl --user mask warp-taskbar
 ```
 
-### Optimization mkinitcpio
+### Optimization mkinitcpio:
 ```bash
 paru -S mkinitcpio-firmware
 
@@ -334,37 +334,38 @@ printf '%s\n' 'COMPRESSION="lz4"' 'COMPRESSION_OPTIONS=(-9)' | sudo tee -a /etc/
 sudo mkinitcpio -P
 ```
 
-### Optimization GRUB
+### Optimization GRUB:
 ```bash
 sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet mitigations=off nmi_watchdog=0 nowatchdog"/' /etc/default/grub
 
 sudo grub-mkconfig -o /boot/grub/grub.cfg
 ```
 
-### Optimization pacman mirrors
+### Optimization pacman mirrors:
 ```bash
 sudo pacman -S reflector
 
 reflector --protocol https --country Germany,Netherlands --age 6 --sort rate --save /etc/pacman.d/mirrorlist
 ```
 
-### Change volume step
+### Change volume step:
 ```bash
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 ```
 
-### Change switch input shortcut
+### Change switch input shortcut:
+```bash
 gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
 gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
+```
 
-
-### Optimization fstab
+### Optimization fstab:
 ```bash
 ext4   rw,noatime,nodiscard,commit=60,data=ordered
 f2fs   rw,noatime,nodiscard,gc_merge,inline_xattr,inline_data,compress_algorithm=zstd
 ```
 
-### Activation everyweek TRIM
+### Activation everyweek TRIM:
 ```bash
 sudo systemctl enable --now fstrim.timer
 ```
@@ -392,9 +393,11 @@ sudo pacman -S zram-generator
 printf '%s\n' '[zram0]' 'zram-size = ram / 2' 'compression-algorithm = lz4' 'swap-priority = 100' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
 ```
 
-### Headphone front panel activation
+### Headphone front panel activation:
 ```bash
 alsamixer # Line -> 100%
+
+sudo alsactl store
 
 mkdir -p ~/.config/autostart
 
@@ -427,12 +430,12 @@ done
 NoDisplay=true
 ```
 
-### For caching new icons
+### For caching new icons:
 ```bash
 sudo gtk-update-icon-cache -f -t /usr/share/icons/"icons_folder"
 ```
 
-### Cleaning Gnome of unnecessary programs
+### Cleaning GNOME of unnecessary programs:
 ```bash
 sudo pacman -D --asdeps $(pacman -Qqg gnome)
 
@@ -443,7 +446,7 @@ sudo pacman -Rsn $(pacman -Qqgdtt gnome)
 sudo pacman -Rns $(pacman -Qdtq) # removal unused dependencies
 ```
 
-### Optimization of processes and rules
+### Optimization of processes and rules:
 ```bash
 paru -S ananicy-cpp cachyos-ananicy-rules irqbalance
 
@@ -452,7 +455,7 @@ sudo systemctl enable --now irqbalance ananicy-cpp
 sudo mkinitcpio -P
 ```
 
-### CachyOS repos
+### CachyOS repos:
 ```bash
 curl https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
 

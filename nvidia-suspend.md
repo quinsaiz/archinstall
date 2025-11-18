@@ -1,21 +1,21 @@
-### /usr/local/bin/suspend-gnome-shell.sh:
+## Fix NVIDIA suspend bugs on GNOME
 
-```
+### Create files
+
+**/usr/local/bin/suspend-gnome-shell.sh:**
+
+```bash
 #!/bin/bash
 
 case "$1" in
-    suspend)
-        killall -STOP gnome-shell
-        ;;
-    resume)
-        killall -CONT gnome-shell
-        ;;
+    suspend) killall -STOP gnome-shell ;;
+    resume)  killall -CONT gnome-shell ;;
 esac
 ```
 
-### /etc/systemd/system/gnome-shell-suspend.service:
+**/etc/systemd/system/gnome-shell-suspend.service:**
 
-```
+```bash
 [Unit]
 Description=Suspend gnome-shell
 Before=systemd-suspend.service
@@ -32,9 +32,9 @@ WantedBy=systemd-suspend.service
 WantedBy=systemd-hibernate.service
 ```
 
-### /etc/systemd/system/gnome-shell-resume.service:
+**/etc/systemd/system/gnome-shell-resume.service:**
 
-```
+```bash
 [Unit]
 Description=Resume gnome-shell
 After=systemd-suspend.service
@@ -52,17 +52,20 @@ WantedBy=systemd-hibernate.service
 
 ### Then just enable the two new systemd units:
 
-```
+```bash
 systemctl daemon-reload
-systemctl enable gnome-shell-suspend
-systemctl enable gnome-shell-resume
+
+sudo systemctl enable gnome-shell-suspend.service gnome-shell-resume.service
 ```
 
-## Bash:
+## 
 
-```
+### For bash:
+
+```bash
 sudo install -Dm755 /dev/stdin /usr/local/bin/suspend-gnome-shell.sh <<'EOF'
 #!/bin/bash
+
 case "$1" in
     suspend) killall -STOP gnome-shell ;;
     resume)  killall -CONT gnome-shell ;;
@@ -96,7 +99,12 @@ ExecStart=/usr/local/bin/suspend-gnome-shell.sh resume
 [Install]
 WantedBy=systemd-suspend.service systemd-hibernate.service
 EOF
+```
 
+### Then just enable the two new systemd units:
+
+```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now gnome-shell-suspend.service gnome-shell-resume.service
+
+sudo systemctl enable gnome-shell-suspend.service gnome-shell-resume.service
 ```
