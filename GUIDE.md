@@ -6,7 +6,7 @@
 ```bash
 timedatectl set-ntp true
 ```
-### Connect to the internet
+### Connect to the internet (WiFi)
 ```bash
 rfkill unblock wifi
 
@@ -20,26 +20,24 @@ iwctl --passphrase "password" station wlan0 connect "SSID"
 ```bash
 fdisk -l
 
-fdisk /dev/nvme0n1
-```
-
-#### or
-```bash
 cfdisk /dev/nvme0n1
 ```
 
 ### Format the partitions
 
-#### if **ext4**
+#### Create EFI partition
 ```bash
 mkfs.vfat -F32 /dev/nvme0n1p1
+```
 
+#### **ext4**
+```bash
 mkfs.ext4 -L "arch" /dev/nvme0n1p2
 
 mkfs.ext4 -L "home" /dev/nvme0n1p3
 ```
 
-#### if **f2fs**
+#### **f2fs**
 ```bash
 mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
 
@@ -67,14 +65,13 @@ pacstrap -i /mnt base base-devel linux-zen linux-zen-headers linux-firmware amd-
 - linux linux-headers
 - intel-ucode
 
-
 ## Configure the system
 
 ### Generate fstab
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
 ```
-
+arch
 ### Chroot
 ```bash
 arch-chroot /mnt
@@ -161,6 +158,11 @@ reboot
 
 ## Post-install
 
+### Connect to the internet (WiFi)
+```bash
+nmtui
+```
+
 ### Pacman
 ```bash
 sudo sed -i '/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
@@ -176,9 +178,9 @@ sudo pacman -Sy
 ```bash
 sudo pacman -S nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings 
 
-sudo pacman -S vulkan-icd-loader lib32-vulkan-icd-loader opencl-nvidia lib32-opencl-nvidia cuda libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg
+sudo pacman -S vulkan-icd-loader lib32-vulkan-icd-loader opencl-nvidia lib32-opencl-nvidia libva lib32-libva libva-utils vulkan-tools mesa-utils lib32-mesa-utils v4l-utils ffmpeg cuda --needed
 
-printf '%s\n' 'options nvidia NVreg_PreserveVideoMemoryAllocations=1 nvidia_drm.modeset=1 nvidia_drm.fbdev=1' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+printf '%s\n' 'options nvidia nvidia_drm.modeset=1 nvidia_drm.fbdev=1' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
 
 printf '%s\n' 'blacklist i2c_nvidia_gpu' | sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null
 
@@ -193,9 +195,9 @@ sudo cat /proc/driver/nvidia/params # for verification of installation
 
 ### AMD GPU
 ```bash
-sudo pacman -S mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
+sudo pacman -S mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon --needed
 
-sudo pacman -S vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools v4l-utils ffmpeg mesa-utils lib32-mesa-utils
+sudo pacman -S vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver lib32-libva-mesa-driver libva lib32-libva libva-utils vulkan-tools mesa-utils lib32-mesa-utils v4l-utils ffmpeg --needed
 ```
 
 ### GNOME
@@ -209,7 +211,7 @@ sudo reboot
 
 ### Installation of basic programs
 ```bash
-sudo pacman -S firefox firefox-i18n-uk fastfetch btop nvtop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme
+sudo pacman -S firefox firefox-i18n-uk fastfetch btop nvtop gnome-browser-connector gnome-tweaks bash-completion adw-gtk-theme --needed
 
 paru -S suru-plus-git
 ```
@@ -218,23 +220,23 @@ paru -S suru-plus-git
 ```bash
 sudo pacman -S git --needed
 
-git clone https://aur.archlinux.org/paru-bin.git
+git clone https://aur.archlinux.org/paru.git
 
-cd paru-bin && makepkg -sricCf
+cd paru && makepkg -si
 
 paru -Syu pamac-aur
 ```
 
 ### Sound and equalizer settings
 ```bash
-sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects
+sudo pacman -S alsa-utils pipewire pipewire-pulse pipewire-alsa wireplumber easyeffects --needed
 
 sudo pacman -S lsp-plugins lsp-plugins-lv2 lsp-plugins-vst lsp-plugins-vst3 calf mda.lv2 # plugins for equalizer
 ```
 
 ### Installation fonts
 ```bash
-sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family ttf-roboto
+sudo pacman -S noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-liberation ttf-ubuntu-font-family ttf-roboto --needed
 
 paru -S ttf-ms-win11-auto
 ```
@@ -246,6 +248,7 @@ sudo pacman -S ufw gufw
 sudo systemctl enable --now ufw
 
 sudo ufw default deny incoming
+
 sudo ufw default allow outgoing
 
 sudo ufw allow from 192.168.0.0/24 to any port 5173 proto tcp 
@@ -264,7 +267,7 @@ sudo systemctl enable --now power-profiles-daemon
 ```bash
 sudo pacman -S steam
 
-sudo pacman -S gamemode lib32-gamemode mangohud lib32-mangohud goverlay
+sudo pacman -S mangohud lib32-mangohud goverlay gamemode lib32-gamemode
 
 sudo usermod -aG gamemode $(whoami)
 
@@ -345,7 +348,9 @@ sudo grub-mkconfig -o /boot/grub/grub.cfg
 ```bash
 sudo pacman -S reflector
 
-reflector --protocol https --country Germany,Netherlands --age 6 --sort rate --save /etc/pacman.d/mirrorlist
+sudo reflector --protocol https --country Germany,Ukraine,Poland --age 6 --sort rate --save /etc/pacman.d/mirrorlist
+
+sudo pacman -Syy
 ```
 
 ### Change volume step:
