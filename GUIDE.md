@@ -15,7 +15,6 @@ iw dev waln0 scan | grep SSID
 iwctl --passphrase "password" station wlan0 connect "SSID"
 ```
 
-
 ### Create partitions:
 ```bash
 fdisk -l
@@ -361,22 +360,11 @@ sudo reflector --protocol https --country Germany,Ukraine,Poland --age 6 --sort 
 sudo pacman -Syy
 ```
 
-### Change volume step:
-```bash
-gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
-```
-
-### Change switch input shortcut:
-```bash
-gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
-gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
-```
-
 ### Optimization fstab:
-```bash
-ext4   rw,noatime,nodiscard,commit=60,data=ordered
-f2fs   rw,noatime,nodiscard,gc_merge,inline_xattr,inline_data,compress_algorithm=zstd
-```
+| Filesystem | Parameters |
+| :---: | :---: |
+| `ext4` |  `rw,noatime,nodiscard,commit=60,data=ordered` |
+| `f2fs` |  `rw,noatime,nodiscard,gc_merge,inline_xattr,inline_data,compress_algorithm=zstd` |
 
 ### Activation everyweek TRIM:
 ```bash
@@ -406,6 +394,31 @@ sudo pacman -S zram-generator
 printf '%s\n' '[zram0]' 'zram-size = ram / 2' 'compression-algorithm = lz4' 'swap-priority = 100' | sudo tee /etc/systemd/zram-generator.conf > /dev/null
 ```
 
+### Change volume step:
+```bash
+gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
+```
+
+### Change switch input shortcut:
+```bash
+gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
+
+gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
+```
+
+### Recommended extensions
+- [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/)
+- [BlurMyShell](https://extensions.gnome.org/extension/3193/blur-my-shell/)
+- [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/)
+- [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
+- [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
+- [Weather Effect](https://extensions.gnome.org/extension/soon/weather-effect/)
+
+### Hide application .desktop
+```bash
+NoDisplay=true
+```
+
 ### Headphone front panel activation:
 ```bash
 alsamixer # Line -> 100%
@@ -428,19 +441,6 @@ for card in 0 1; do
     amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
     amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
 done
-```
-
-### Recommended extensions
-- [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/)
-- [BlurMyShell](https://extensions.gnome.org/extension/3193/blur-my-shell/)
-- [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/)
-- [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
-- [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
-- [Weather Effect](https://extensions.gnome.org/extension/soon/weather-effect/)
-
-### Hide application .desktop
-```bash
-NoDisplay=true
 ```
 
 ### For caching new icons:
