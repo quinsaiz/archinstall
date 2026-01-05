@@ -30,14 +30,14 @@ cfdisk /dev/nvme0n1
 mkfs.vfat -F32 /dev/nvme0n1p1
 ```
 
-#### **ext4**
+#### **ext4:**
 ```bash
 mkfs.ext4 -L "arch" /dev/nvme0n1p2
 
 mkfs.ext4 -L "home" /dev/nvme0n1p3
 ```
 
-#### **f2fs**
+#### **f2fs:**
 ```bash
 mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
 
@@ -80,6 +80,7 @@ arch-chroot /mnt
 ### Time
 ```bash
 ln -sf /usr/share/zoneinfo/Europe/Kyiv /etc/localtime
+
 hwclock --systohc
 ```
 
@@ -128,7 +129,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 ### User management
 
-#### For root:
+#### Set password for root:
 ```bash
 passwd
 ```
@@ -256,6 +257,13 @@ sudo ufw allow from 192.168.0.0/24 to any port 5173 proto tcp
 sudo ufw enable
 ```
 
+### Bluetooth
+```bash
+sudo pacman -S bluez bluez-utils --needed
+
+sudo systemctl enable --now bluetooth.service
+```
+
 ### Power profiles
 ```bash
 sudo pacman -S power-profiles-daemon
@@ -263,7 +271,7 @@ sudo pacman -S power-profiles-daemon
 sudo systemctl enable --now power-profiles-daemon
 ```
 
-### Game utils
+### Gaming utils
 ```bash
 sudo pacman -S steam
 
@@ -271,7 +279,7 @@ sudo pacman -S mangohud lib32-mangohud goverlay gamemode lib32-gamemode
 
 sudo usermod -aG gamemode $(whoami)
 
-paru -S portproton vkbasalt
+paru -S vkbasalt lib32-vkbasalt
 ```
 
 ### Zsh
@@ -295,7 +303,7 @@ sed -i 's/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions
 printf '%s\n' 'include /usr/share/nano/*.nanorc' >> ~/.nanorc 2>/dev/null
 ```
 
-#### Fix tty:
+#### Fix **tty**:
 ```bash
 sed -i '/^ZSH_THEME=/c\
 if [ "$(tput colors)" -ge 256 ]; then\
