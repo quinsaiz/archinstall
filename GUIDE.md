@@ -346,7 +346,7 @@ sudo mkinitcpio -P
 
 ### Optimization GRUB:
 ```bash
-sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet mitigations=off nmi_watchdog=0 nowatchdog"/' /etc/default/grub
+sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=".*/GRUB_CMDLINE_LINUX_DEFAULT="quiet mitigations=off nmi_watchdog=0 nowatchdog"/' /etc/default/grub #add amdgpu.runpm=0 to fix suspend on amdgpu
 
 sudo grub-mkconfig -o /boot/grub/grub.cfg
 ```
