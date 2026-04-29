@@ -3,7 +3,7 @@
         "bass_enhancer#0": {
             "amount": 3.0,
             "blend": 0.0,
-            "bypass": false,
+            "bypass": true,
             "floor": 20.0,
             "floor-active": false,
             "harmonics": 5.0,
@@ -101,7 +101,7 @@
             },
             "mode": "IIR",
             "num-bands": 4,
-            "output-gain": 3.0,
+            "output-gain": 0.0,
             "pitch-left": 0.0,
             "pitch-right": 0.0,
             "right": {
