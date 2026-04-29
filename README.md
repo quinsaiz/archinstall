@@ -100,29 +100,41 @@ hwclock --systohc
 ### Localization
 
 ```bash
-echo -e "en_US.UTF-8 UTF-8" | tee -a /etc/locale.gen
+echo -e \
+"en_US.UTF-8 UTF-8" \
+| tee -a /etc/locale.gen
 
 locale-gen
 
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo \
+"LANG=en_US.UTF-8" \
+> /etc/locale.conf
 ```
 
 #### If another language
 
 ```bash
-echo -e "en_US.UTF-8 UTF-8\nuk_UA.UTF-8 UTF-8" | tee -a /etc/locale.gen
+echo -e \
+"en_US.UTF-8 UTF-8\nuk_UA.UTF-8 UTF-8" \
+| tee -a /etc/locale.gen
 
 locale-gen
 
-echo "LANG=uk_UA.UTF-8" > /etc/locale.conf
+echo \
+"LANG=uk_UA.UTF-8" \
+> /etc/locale.conf
 
-echo -e "KEYMAP=ua-utf\nFONT=UniCyr_8x16" > /etc/vconsole.conf
+echo -e \
+"KEYMAP=ua-utf\nFONT=UniCyr_8x16" \
+> /etc/vconsole.conf
 ```
 
 ### Hostname
 
 ```bash
-echo "arch" > /etc/hostname
+echo \
+"arch" \
+> /etc/hostname
 ```
 
 ### Bootloader
@@ -212,9 +224,10 @@ sudo pacman -Syu
 ### NVIDIA GPU
 
 ```bash
+# use nvidia-open for stock linux kernel, nvidia-open-dkms for custom kernels
 sudo pacman -S \
 nvidia-open-dkms nvidia-utils lib32-nvidia-utils \
-nvidia-settings --needed # use nvidia-open for stock linux kernel, nvidia-open-dkms for custom kernels
+nvidia-settings --needed 
 
 sudo pacman -S \
 vulkan-icd-loader lib32-vulkan-icd-loader \
@@ -235,12 +248,13 @@ printf '%s\n' \
 | sudo tee /etc/modprobe.d/nouveau.conf > /dev/null
 
 sudo sed -i \
-'/^MODULES=(/ s/)/ nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' \
+'s/^MODULES=(\(.*\))/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' \
 /etc/mkinitcpio.conf
 
 sudo mkinitcpio -P
 
-sudo cat /proc/driver/nvidia/params # for verification of installation
+# for verification of installation
+sudo cat /proc/driver/nvidia/params
 ```
 
 ### AMD GPU
@@ -276,7 +290,7 @@ firefox firefox-i18n-uk fastfetch btop nvtop vlc \
 qbittorrent obs-studio adw-gtk-theme dosfstools ntfs-3g \
 gnome-browser-connector gnome-tweaks bash-completion --needed
 
-paru -S suru-plus-git
+paru -S suru-plus-dark-git
 ```
 
 ### Installation paru and pamac
@@ -310,8 +324,6 @@ sudo curl -L \
 sudo pacman -S \
 noto-fonts noto-fonts-cjk noto-fonts-emoji \
 ttf-liberation ttf-roboto --needed
-
-paru -S ttf-ms-win11-auto
 ```
 
 ### Firewall settings
@@ -361,43 +373,26 @@ paru -S vkbasalt lib32-vkbasalt
 ```
 
 ### Zsh
-
 ```bash
-sudo pacman -S zsh zsh-completions ttf-firacode-nerd
+sudo pacman -S zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting ttf-jetbrains-mono-nerd
 
-sudo chsh -s /bin/zsh
+chsh -s /bin/zsh
 
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
-git clone https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
 
 sed -i \
 's#ZSH_THEME="robbyrussell"#ZSH_THEME="powerlevel10k/powerlevel10k"#' \
 ~/.zshrc
 
-git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+printf \
+'\n# Plugins\nsource /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh\nsource /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh\n' \
+>> ~/.zshrc
 
-git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-
-sed -i \
-'s/plugins=(git)/plugins=(git zsh-syntax-highlighting zsh-autosuggestions)/' \
-~/.zshrc
-
-printf '%s\n' \
-'include /usr/share/nano/*.nanorc' \
->> ~/.nanorc 2>/dev/null
-```
-
-#### Fix **tty**
-
-```bash
-sed -i '/^ZSH_THEME=/c\
-if [ "$(tput colors)" -ge 256 ]; then\
-  ZSH_THEME="powerlevel10k/powerlevel10k"\
-else\
-  ZSH_THEME=""\
-  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "\
-fi' ~/.zshrc
+printf \
+'include /usr/share/nano/*.nanorc\n' \
+>> ~/.nanorc
 ```
 
 ### Dnsmasq
@@ -502,14 +497,6 @@ printf '%s\n' \
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 ```
 
-### Change switch input shortcut
-
-```bash
-gsettings set org.gnome.desktop.wm.keybindings switch-input-source "['<Shift>Alt_L']"
-
-gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<Alt>Shift_L']"
-```
-
 ### Recommended extensions
 
 - [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/)
@@ -518,17 +505,13 @@ gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "['<
 - [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
 - [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
 
-### Hide application .desktop
-
-```bash
-NoDisplay=true
-```
+#
 
 ### Fix suspend on amdgpu
 
 ```bash
 sudo sed -i \
-'s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet amdgpu.runpm=0"/' \
+'s/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 amdgpu.runpm=0"/' \
 /etc/default/grub
 
 sudo grub-mkconfig -o /boot/grub/grub.cfg
@@ -568,7 +551,8 @@ xdg-user-dirs-gtk
 
 sudo pacman -Rsn $(pacman -Qqgdtt gnome)
 
-sudo pacman -Rns $(pacman -Qdtq) # removal unused dependencies
+# removal unused dependencies
+sudo pacman -Rns $(pacman -Qdtq)
 ```
 
 ### Headphone front panel activation
