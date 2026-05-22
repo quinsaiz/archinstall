@@ -31,7 +31,7 @@ cfdisk /dev/nvme0n1
 #### Create EFI partition
 
 ```bash
-mkfs.vfat -F32 /dev/nvme0n1p1
+mkfs.vfat -F32 -n "EFI" /dev/nvme0n1p1
 ```
 
 #### **ext4:**
@@ -40,14 +40,6 @@ mkfs.vfat -F32 /dev/nvme0n1p1
 mkfs.ext4 -L "arch" /dev/nvme0n1p2
 
 mkfs.ext4 -L "home" /dev/nvme0n1p3
-```
-
-#### **f2fs:**
-
-```bash
-mkfs.f2fs -f -l "arch" /dev/nvme0n1p2
-
-mkfs.f2fs -f -l "home" /dev/nvme0n1p3
 ```
 
 ### Mounting
@@ -67,7 +59,10 @@ mount /dev/nvme0n1p1 /mnt/boot/efi
 ### Installing the main packages
 
 ```bash
-pacstrap /mnt base base-devel linux-zen linux-zen-headers linux-firmware amd-ucode networkmanager nano
+pacstrap /mnt base base-devel \
+linux-zen linux-zen-headers \
+linux-firmware amd-ucode \
+networkmanager nano
 ```
 
 ###
@@ -139,6 +134,31 @@ echo \
 
 ### Bootloader
 
+#### systemd-boot
+
+```bash
+sudo sed -i -E 's/fmask=[0-9]+,dmask=[0-9]+/fmask=0077,dmask=0077/' /mnt/etc/fstab
+
+bootctl install
+
+# add 'editor no' here after full system setup
+printf '%s\n' \
+'default arch.conf' \
+'timeout 3' \
+'console-mode max' \
+| tee /boot/efi/loader/loader.conf > /dev/null
+
+printf '%s\n' \
+'title   Arch Linux (Zen)' \
+'linux   /vmlinuz-linux-zen' \
+'initrd  /amd-ucode.img' \
+'initrd  /initramfs-linux-zen.img' \
+"options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rw" \
+| tee /boot/efi/loader/entries/arch.conf > /dev/null
+```
+
+#### grub
+
 ```bash
 pacman -S grub efibootmgr
 
@@ -147,7 +167,7 @@ grub-install /dev/nvme0n1
 grub-mkconfig -o /boot/grub/grub.cfg
 ```
 
-#### If Windows is installed
+#### If Windows is installed (only with grub)
 
 ```bash
 pacman -S os-prober
@@ -224,28 +244,23 @@ sudo pacman -Syu
 ### NVIDIA GPU
 
 ```bash
-# use nvidia-open for stock linux kernel, nvidia-open-dkms for custom kernels
+# use 'nvidia-open' for stock linux kernel, 'nvidia-open-dkms' for custom kernels
 sudo pacman -S \
 nvidia-open-dkms nvidia-utils lib32-nvidia-utils \
 nvidia-settings --needed 
 
 sudo pacman -S \
 vulkan-icd-loader lib32-vulkan-icd-loader \
-opencl-nvidia libva libva-utils \
-vulkan-tools mesa-utils v4l-utils ffmpeg cuda \
---needed
+opencl-nvidia libva libva-utils libva-nvidia-driver \
+vulkan-tools mesa-utils v4l-utils ffmpeg cuda --needed
 
 printf '%s\n' \
-'options nvidia_drm modeset=1 fbdev=1' \
+'options nvidia_drm modeset=1' \
 | sudo tee /etc/modprobe.d/nvidia-drm.conf > /dev/null
 
 printf '%s\n' \
 'blacklist i2c_nvidia_gpu' \
 | sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null
-
-printf '%s\n' \
-'blacklist nouveau' 'options nouveau modeset=0' \
-| sudo tee /etc/modprobe.d/nouveau.conf > /dev/null
 
 sudo sed -i \
 's/^MODULES=(\(.*\))/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' \
@@ -286,8 +301,9 @@ sudo reboot
 
 ```bash
 sudo pacman -S \
-firefox firefox-i18n-uk fastfetch btop nvtop vlc \
-qbittorrent obs-studio adw-gtk-theme dosfstools ntfs-3g \
+dosfstools ntfs-3g \
+firefox fastfetch btop nvtop luajit \
+qbittorrent obs-studio adw-gtk-theme papirus-icon-theme \
 gnome-browser-connector gnome-tweaks bash-completion --needed
 
 paru -S suru-plus-dark-git
@@ -322,8 +338,8 @@ sudo curl -L \
 
 ```bash
 sudo pacman -S \
-noto-fonts noto-fonts-cjk noto-fonts-emoji \
-ttf-liberation ttf-roboto --needed
+ttf-liberation ttf-roboto ttf-jetbrains-mono-nerd \
+noto-fonts noto-fonts-cjk noto-fonts-emoji --needed
 ```
 
 ### Firewall settings
@@ -373,8 +389,9 @@ paru -S vkbasalt lib32-vkbasalt
 ```
 
 ### Zsh
+
 ```bash
-sudo pacman -S zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting ttf-jetbrains-mono-nerd
+sudo pacman -S zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting
 
 chsh -s /bin/zsh
 
@@ -504,8 +521,6 @@ gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 - [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/)
 - [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
 - [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
-
-#
 
 ### Fix suspend on amdgpu
 
