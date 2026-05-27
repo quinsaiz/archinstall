@@ -463,7 +463,7 @@ sudo reflector \
 --sort rate \
 --save /etc/pacman.d/mirrorlist
 
-sudo pacman -Syu
+sudo pacman -Syyu
 ```
 
 ### Activation everyweek TRIM
