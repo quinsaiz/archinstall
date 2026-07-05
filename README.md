@@ -8,7 +8,7 @@
 timedatectl set-ntp true
 ```
 
-### Connect to the internet (WiFi)
+### Connect to the internet (Wi-Fi)
 
 ```bash
 rfkill unblock wifi
@@ -26,15 +26,17 @@ fdisk -l
 cfdisk /dev/nvme0n1
 ```
 
-### Format the partitions
-
 #### Create EFI partition
 
 ```bash
 mkfs.vfat -F32 -n "EFI" /dev/nvme0n1p1
 ```
 
-#### **ext4:**
+---
+
+### EXT4
+
+#### Create main partition
 
 ```bash
 mkfs.ext4 -L "arch" /dev/nvme0n1p2
@@ -42,17 +44,51 @@ mkfs.ext4 -L "arch" /dev/nvme0n1p2
 mkfs.ext4 -L "home" /dev/nvme0n1p3
 ```
 
-### Mounting
+#### Mount
 
 ````bash
 mount /dev/nvme0n1p2 /mnt
 
-mkdir -p /mnt/{home,boot/efi}
+mount --mkdir /dev/nvme0n1p3 /mnt/home
 
-mount /dev/nvme0n1p3 /mnt/home
-
-mount /dev/nvme0n1p1 /mnt/boot/efi
+mount --mkdir /dev/nvme0n1p1 /mnt/boot
 ````
+
+---
+
+### BTRFS
+
+#### Create subvolumes partition
+
+```bash
+mkfs.btrfs -L "arch" /dev/nvme0n1p2
+
+mount /dev/nvme0n1p2 /mnt
+
+btrfs subvolume create /mnt/@
+
+btrfs subvolume create /mnt/@home
+
+# for Snapper
+btrfs subvolume create /mnt/@var_log
+btrfs subvolume create /mnt/@pkg
+
+umount /mnt
+```
+
+#### Mount subvolumes
+
+```bash
+mount -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@ /dev/nvme0n1p2 /mnt
+
+mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@home /dev/nvme0n1p2 /mnt/home
+
+# for Snapper
+mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@var_log /dev/nvme0n1p2 /mnt/var/log
+mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@pkg /dev/nvme0n1p2 /mnt/var/cache/pacman/pkg
+
+mount --mkdir /dev/nvme0n1p1 /mnt/boot
+```
 
 ## Installation
 
@@ -65,17 +101,16 @@ linux-firmware amd-ucode \
 networkmanager nano
 ```
 
-###
-
-- linux linux-headers
-- intel-ucode
-
 ## Configure the system
 
 ### Generate fstab
 
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
+
+sed -i -E \
+'s/fmask=[0-9]+,dmask=[0-9]+/fmask=0077,dmask=0077/' \
+/mnt/etc/fstab
 ```
 
 ### Arch Chroot
@@ -95,9 +130,9 @@ hwclock --systohc
 ### Localization
 
 ```bash
-echo -e \
-"en_US.UTF-8 UTF-8" \
-| tee -a /etc/locale.gen
+sed -i \
+'s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \
+/etc/locale.gen
 
 locale-gen
 
@@ -109,9 +144,13 @@ echo \
 #### If another language
 
 ```bash
-echo -e \
-"en_US.UTF-8 UTF-8\nuk_UA.UTF-8 UTF-8" \
-| tee -a /etc/locale.gen
+sed -i \
+'s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \
+/etc/locale.gen
+
+sed -i \
+'s/#uk_UA.UTF-8 UTF-8/uk_UA.UTF-8 UTF-8/' \
+/etc/locale.gen
 
 locale-gen
 
@@ -137,24 +176,23 @@ echo \
 #### systemd-boot
 
 ```bash
-sudo sed -i -E 's/fmask=[0-9]+,dmask=[0-9]+/fmask=0077,dmask=0077/' /mnt/etc/fstab
-
 bootctl install
 
 # add 'editor no' here after full system setup
 printf '%s\n' \
 'default arch.conf' \
-'timeout 3' \
-'console-mode max' \
-| tee /boot/efi/loader/loader.conf > /dev/null
+'timeout 5' \
+| tee /boot/loader/loader.conf > /dev/null
 
+# UUID refers to Filesystem UUID
+# if btrfs before rw should be 'rootflags=subvol=@'
 printf '%s\n' \
 'title   Arch Linux (Zen)' \
 'linux   /vmlinuz-linux-zen' \
 'initrd  /amd-ucode.img' \
 'initrd  /initramfs-linux-zen.img' \
 "options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rw" \
-| tee /boot/efi/loader/entries/arch.conf > /dev/null
+| tee /boot/loader/entries/arch.conf > /dev/null
 ```
 
 #### grub
@@ -301,23 +339,10 @@ sudo reboot
 
 ```bash
 sudo pacman -S \
-dosfstools ntfs-3g \
-firefox fastfetch btop nvtop luajit \
+git dosfstools ntfs-3g btop nvtop \
+firefox telegram resources fastfetch luajit \
 qbittorrent obs-studio adw-gtk-theme papirus-icon-theme \
 gnome-browser-connector gnome-tweaks bash-completion --needed
-
-paru -S suru-plus-dark-git
-```
-
-### Installation paru and pamac
-
-```bash
-sudo pacman -S git --needed
-
-git clone https://aur.archlinux.org/paru.git && \
-cd paru && makepkg -si
-
-paru -S pamac-aur
 ```
 
 ### Sound and equalizer settings
@@ -345,35 +370,21 @@ noto-fonts noto-fonts-cjk noto-fonts-emoji --needed
 ### Firewall settings
 
 ```bash
-sudo pacman -S ufw gufw
-
-sudo systemctl enable --now ufw
-
-sudo ufw default deny incoming
-
-sudo ufw default allow outgoing
-
-sudo ufw allow from 192.168.0.0/24 to any port 8000 proto tcp 
-
+sudo pacman -S ufw gufw && \
+sudo systemctl enable --now ufw && \
+sudo ufw default deny incoming && \
+sudo ufw default allow outgoing && \
 sudo ufw enable
-```
 
-### Bluetooth
-
-```bash
-sudo pacman -S bluez bluez-utils --needed
-
-sudo systemctl enable --now bluetooth.service
+# allow TCP traffic from local network
+sudo ufw allow from 192.168.0.0/24 to any port "PORT" proto tcp 
 ```
 
 ### Power profiles
 
 ```bash
-sudo pacman -S power-profiles-daemon
-
+sudo pacman -S power-profiles-daemon && \
 sudo systemctl enable --now power-profiles-daemon
-
-paru -S ppd-cpu-boost
 ```
 
 ### Gaming utils
@@ -381,21 +392,18 @@ paru -S ppd-cpu-boost
 ```bash
 sudo pacman -S steam
 
-sudo pacman -S mangohud lib32-mangohud goverlay gamemode lib32-gamemode
-
+sudo pacman -S gamemode lib32-gamemode && \
 sudo usermod -aG gamemode $(whoami)
-
-paru -S vkbasalt lib32-vkbasalt
 ```
 
-### Zsh
+### zsh
 
 ```bash
 sudo pacman -S zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting
 
 chsh -s /bin/zsh
 
-sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
 
@@ -403,12 +411,15 @@ sed -i \
 's#ZSH_THEME="robbyrussell"#ZSH_THEME="powerlevel10k/powerlevel10k"#' \
 ~/.zshrc
 
-printf \
-'\n# Plugins\nsource /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh\nsource /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh\n' \
+printf '%s\n' \
+"" \
+'# Plugins' \
+'source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' \
+'source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' \
 >> ~/.zshrc
 
-printf \
-'include /usr/share/nano/*.nanorc\n' \
+printf '%s\n' \
+'include /usr/share/nano/*.nanorc' \
 >> ~/.nanorc
 ```
 
@@ -425,18 +436,6 @@ printf '%s\n' \
 nmcli general reload
 ```
 
-### Cloudlfare WARP
-
-```bash
-paru -S cloudflare-warp-bin
-
-sudo systemctl enable --now warp-svc
-
-warp-cli registration new
-
-systemctl --user mask warp-taskbar
-```
-
 ### Optimization mkinitcpio
 
 ```bash
@@ -449,6 +448,62 @@ sudo sed -i \
 /etc/mkinitcpio.conf
 
 sudo mkinitcpio -P
+```
+
+### Activation everyweek TRIM
+
+```bash
+sudo systemctl enable --now fstrim.timer
+```
+
+### Snapper
+
+```bash
+sudo pacman -S snapper snap-pac
+
+sudo snapper -c root create-config /
+
+sudo btrfs subvolume delete /.snapshots
+
+sudo mkdir -p /mnt/btrfs-root
+sudo mount -o subvol=/ /dev/nvme0n1p2 /mnt/btrfs-root
+sudo btrfs subvolume create /mnt/btrfs-root/@snapshots
+sudo umount /mnt/btrfs-root
+sudo rmdir /mnt/btrfs-root
+
+sudo mkdir /.snapshots
+sudo mount -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@snapshots /dev/nvme0n1p2 /.snapshots
+
+sudo chmod 750 /.snapshots
+sudo chown :wheel /.snapshots
+
+echo "UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) /.snapshots btrfs noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@snapshots 0 0" | sudo tee -a /etc/fstab > /dev/null
+
+sudo snapper -c root set-config \
+"TIMELINE_CREATE=yes" \
+"TIMELINE_CLEANUP=yes" \
+"TIMELINE_LIMIT_HOURLY=5" \
+"TIMELINE_LIMIT_DAILY=7" \
+"TIMELINE_LIMIT_WEEKLY=0" \
+"TIMELINE_LIMIT_MONTHLY=0" \
+"TIMELINE_LIMIT_YEARLY=0"
+
+sudo systemctl enable --now snapper-timeline.timer snapper-cleanup.timer
+```
+
+### Extented configure locales
+
+```bash
+sudo sed -i -E 's/#\s*((en_DK|uk_UA).UTF-8 UTF-8)/\1/' /etc/locale.gen
+
+printf '%s\n' \
+'LANG=en_US.UTF-8' \
+'LC_TIME=en_DK.UTF-8' \
+'LC_MONETARY=uk_UA.UTF-8' \
+'LC_NUMERIC=uk_UA.UTF-8' \
+'LC_MEASUREMENT=uk_UA.UTF-8' \
+'LC_PAPER=uk_UA.UTF-8' \
+| sudo tee /etc/locale.conf > /dev/null
 ```
 
 ### Optimization pacman mirrors
@@ -466,10 +521,33 @@ sudo reflector \
 sudo pacman -Syyu
 ```
 
-### Activation everyweek TRIM
+### Installation paru and pamac
 
 ```bash
-sudo systemctl enable --now fstrim.timer
+git clone https://aur.archlinux.org/paru.git && \
+cd paru && makepkg -si
+
+paru -S pamac-aur
+```
+
+### Bluetooth
+
+```bash
+sudo pacman -S bluez bluez-utils --needed
+
+sudo systemctl enable --now bluetooth.service
+```
+
+### Cloudlfare WARP
+
+```bash
+paru -S cloudflare-warp-bin
+
+sudo systemctl enable --now warp-svc
+
+warp-cli registration new
+
+systemctl --user mask warp-taskbar
 ```
 
 ### SWAP
@@ -490,12 +568,18 @@ printf '%s\n' \
 #### swapfile
 
 ```bash
-sudo fallocate -l 8G /swapfile
+# if ext4
+sudo fallocate -l 8G /swapfile && \
+sudo chmod 600 /swapfile && \
+sudo mkswap /swapfile && \
+sudo swapon /swapfile
 
-sudo chmod 600 /swapfile
-
-sudo mkswap /swapfile
-
+# if btrfs
+sudo truncate -s 0 /swapfile && \
+sudo chattr +C /swapfile && \
+sudo fallocate -l 8G /swapfile && \
+sudo chmod 600 /swapfile && \
+sudo mkswap /swapfile && \
 sudo swapon /swapfile
 
 printf '%s\n' \
@@ -524,6 +608,16 @@ gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 
 ### Fix suspend on amdgpu
 
+#### if systemd-boot
+
+```bash
+sudo sed -i \
+'/^options/ s/$/ amdgpu.runpm=0/' \
+/boot/loader/entries/arch.conf
+```
+
+#### if grub
+
 ```bash
 sudo sed -i \
 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 amdgpu.runpm=0"/' \
@@ -545,8 +639,8 @@ sudo pacman -Rns \
 gnome-calendar gnome-characters gnome-clocks \
 gnome-connections gnome-contacts gnome-music \
 gnome-font-viewer gnome-maps gnome-software \
-gnome-tour gnome-weather epiphany \
-baobab simple-scan papers snapshot
+gnome-system-monitor gnome-tour gnome-weather \
+baobab epiphany simple-scan papers snapshot
 ```
 
 ### Cleaning GNOME of unnecessary programs (Be careful)
