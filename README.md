@@ -51,7 +51,7 @@ mount /dev/nvme0n1p2 /mnt
 
 mount --mkdir /dev/nvme0n1p3 /mnt/home
 
-mount --mkdir /dev/nvme0n1p1 /mnt/boot
+mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
 ````
 
 ---
@@ -71,7 +71,9 @@ btrfs subvolume create /mnt/@home
 
 # for Snapper
 btrfs subvolume create /mnt/@var_log
+
 btrfs subvolume create /mnt/@pkg
+#
 
 umount /mnt
 ```
@@ -85,9 +87,11 @@ mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@home /dev/nv
 
 # for Snapper
 mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@var_log /dev/nvme0n1p2 /mnt/var/log
-mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@pkg /dev/nvme0n1p2 /mnt/var/cache/pacman/pkg
 
-mount --mkdir /dev/nvme0n1p1 /mnt/boot
+mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@pkg /dev/nvme0n1p2 /mnt/var/cache/pacman/pkg
+#
+
+mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
 ```
 
 ## Installation
@@ -107,10 +111,6 @@ networkmanager nano
 
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
-
-sed -i -E \
-'s/fmask=[0-9]+,dmask=[0-9]+/fmask=0077,dmask=0077/' \
-/mnt/etc/fstab
 ```
 
 ### Arch Chroot
@@ -237,6 +237,15 @@ useradd -m -G wheel -s /bin/bash username
 passwd username
 ```
 
+### Remove fsck from HOOKS (for btrfs)
+```bash
+sed -i \
+'s/\bfsck\b//g; s/  */ /g; s/( /(/' \
+/etc/mkinitcpio.conf
+
+mkinitcpio -P
+```
+
 ### NetworkManager activation
 
 ```bash
@@ -340,7 +349,7 @@ sudo reboot
 ```bash
 sudo pacman -S \
 git dosfstools ntfs-3g btop nvtop \
-firefox telegram resources fastfetch luajit \
+firefox telegram-desktop resources fastfetch luajit \
 qbittorrent obs-studio adw-gtk-theme papirus-icon-theme \
 gnome-browser-connector gnome-tweaks bash-completion --needed
 ```
@@ -408,7 +417,7 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
 
 sed -i \
-'s#ZSH_THEME="robbyrussell"#ZSH_THEME="powerlevel10k/powerlevel10k"#' \
+'s#ZSH_THEME="robbyrussell"#if [ "$TERM" = "linux" ]; then\n  ZSH_THEME="robbyrussell"\nelse\n  ZSH_THEME="powerlevel10k/powerlevel10k"\nfi#' \
 ~/.zshrc
 
 printf '%s\n' \
@@ -421,6 +430,18 @@ printf '%s\n' \
 printf '%s\n' \
 'include /usr/share/nano/*.nanorc' \
 >> ~/.nanorc
+
+sudo chsh -s /bin/bash root
+```
+
+#### for better tty zsh style
+```bash
+if [ "$TERM" = "linux" ]; then
+  ZSH_THEME=""
+  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "
+else
+  ZSH_THEME="powerlevel10k/powerlevel10k"
+fi
 ```
 
 ### Dnsmasq
@@ -450,7 +471,7 @@ sudo sed -i \
 sudo mkinitcpio -P
 ```
 
-### Activation everyweek TRIM
+### Activation everyweek TRIM (for EXT4)
 
 ```bash
 sudo systemctl enable --now fstrim.timer
@@ -605,6 +626,7 @@ gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 - [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/)
 - [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
 - [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
+- [Weather Effect](https://extensions.gnome.org/extension/8848/weather-effect/)
 
 ### Fix suspend on amdgpu
 
