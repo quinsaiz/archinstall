@@ -1,102 +1,111 @@
 # Arch Linux installation guide
 
-## Preparation for installation
+## Contents
 
-### Update the system clock
+- [Part 1. Installation](#part-1-installation)
+- [Part 2. Post-install](#part-2-post-install)
+- [Optional](#optional)
+- [Quick checks](#quick-checks)
+
+## Part 1. Installation
+
+Everything in this part is run from the live ISO, and after `arch-chroot` inside the new system.
+
+### 1.1 Preparation
+
+#### System clock
 
 ```bash
 timedatectl set-ntp true
 ```
 
-### Connect to the internet (Wi-Fi)
+#### Wi-Fi
 
 ```bash
 rfkill unblock wifi
-
 iw dev wlan0 scan | grep SSID
+```
 
+```bash
 iwctl --passphrase "password" station wlan0 connect "SSID"
 ```
 
-### Create partitions
+### 1.2 Partitions
+
+#### Create partitions (interactive)
 
 ```bash
 fdisk -l
+```
 
+```bash
 cfdisk /dev/nvme0n1
 ```
 
-#### Create EFI partition
+#### EFI partition
+
+Format (new ESP only):
 
 ```bash
-mkfs.vfat -F32 -n "EFI" /dev/nvme0n1p1
+mkfs.vfat -F32 -n "efi" /dev/nvme0n1p1
 ```
 
----
+> Formatting a shared ESP deletes the Windows boot files.
+> systemd-boot keeps the kernel and initramfs on the ESP (mounted at `/boot`), so a shared ESP should be at least 512 MB. The one created by the Windows installer is often only about 100 MB.
 
-### EXT4
+### 1.3 Filesystem
 
-#### Create main partition
+#### btrfs (default)
 
-```bash
-mkfs.ext4 -L "arch" /dev/nvme0n1p2
-
-mkfs.ext4 -L "home" /dev/nvme0n1p3
-```
-
-#### Mount
-
-````bash
-mount /dev/nvme0n1p2 /mnt
-
-mount --mkdir /dev/nvme0n1p3 /mnt/home
-
-mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
-````
-
----
-
-### BTRFS
-
-#### Create subvolumes partition
+Create the subvolumes:
 
 ```bash
 mkfs.btrfs -L "arch" /dev/nvme0n1p2
-
 mount /dev/nvme0n1p2 /mnt
-
 btrfs subvolume create /mnt/@
-
 btrfs subvolume create /mnt/@home
-
-# for Snapper
-btrfs subvolume create /mnt/@var_log
-
-btrfs subvolume create /mnt/@pkg
-#
-
 umount /mnt
 ```
 
-#### Mount subvolumes
+Mount them (`ssd` and `space_cache=v2` are detected or enabled by default, so they are not needed):
 
 ```bash
-mount -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@ /dev/nvme0n1p2 /mnt
-
-mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@home /dev/nvme0n1p2 /mnt/home
-
-# for Snapper
-mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@var_log /dev/nvme0n1p2 /mnt/var/log
-
-mount --mkdir -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@pkg /dev/nvme0n1p2 /mnt/var/cache/pacman/pkg
-#
-
+mount -o noatime,compress=zstd:3,subvol=@ /dev/nvme0n1p2 /mnt
+mount --mkdir -o noatime,compress=zstd:3,subvol=@home /dev/nvme0n1p2 /mnt/home
 mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
 ```
 
-## Installation
+---
 
-### Installing the main packages
+Optional, only for Snapper: extra subvolumes for logs and the package cache, so that they are not rolled back together with `/`:
+
+```bash
+mount /dev/nvme0n1p2 /mnt
+btrfs subvolume create /mnt/@var_log
+btrfs subvolume create /mnt/@pkg
+umount /mnt
+```
+
+```bash
+mount --mkdir -o noatime,compress=zstd:3,subvol=@var_log /dev/nvme0n1p2 /mnt/var/log
+mount --mkdir -o noatime,compress=zstd:3,subvol=@pkg /dev/nvme0n1p2 /mnt/var/cache/pacman/pkg
+```
+
+> Run the second Snapper block after the main mounts above, so that `/mnt` is already mounted.
+
+---
+
+#### ext4 (alternative)
+
+```bash
+mkfs.ext4 -L "arch" /dev/nvme0n1p2
+mkfs.ext4 -L "home" /dev/nvme0n1p3
+mount /dev/nvme0n1p2 /mnt
+mount --mkdir /dev/nvme0n1p3 /mnt/home
+mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
+```
+
+### 1.4 Base system
 
 ```bash
 pacstrap /mnt base base-devel \
@@ -105,556 +114,241 @@ linux-firmware amd-ucode \
 networkmanager nano
 ```
 
-## Configure the system
+btrfs only (`base` does not ship the btrfs tools: `btrfs subvolume`, `scrub`, `filesystem usage`):
 
-### Generate fstab
+```bash
+pacstrap /mnt btrfs-progs
+```
+
+### 1.5 Configure the system
+
+#### Generate fstab and enter the new system
 
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
-```
-
-### Arch Chroot
-
-```bash
 arch-chroot /mnt
 ```
 
-### Time
+#### Time
 
 ```bash
 ln -sf /usr/share/zoneinfo/Europe/Kyiv /etc/localtime
-
 hwclock --systohc
 ```
 
-### Localization
+> Dual boot: Windows keeps local time in the hardware clock, Linux keeps UTC, so the time jumps after switching systems.
+> Fix it on the Windows side (PowerShell as administrator):
+>
+> ```powershell
+> reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /d 1 /t REG_QWORD /f
+> ```
+>
+> Also disable Windows Fast Startup if you mount NTFS partitions from Linux.
+
+#### Localization
 
 ```bash
-sed -i \
-'s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \
-/etc/locale.gen
-
+sed -i -E 's/^#\s*((en_US|en_DK|uk_UA)\.UTF-8 UTF-8)/\1/' /etc/locale.gen
 locale-gen
-
-echo \
-"LANG=en_US.UTF-8" \
-> /etc/locale.conf
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
 ```
 
-#### If another language
+Optional, Ukrainian system language and console (use instead of the `LANG` line above):
 
 ```bash
-sed -i \
-'s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \
-/etc/locale.gen
-
-sed -i \
-'s/#uk_UA.UTF-8 UTF-8/uk_UA.UTF-8 UTF-8/' \
-/etc/locale.gen
-
-locale-gen
-
-echo \
-"LANG=uk_UA.UTF-8" \
-> /etc/locale.conf
-
-echo -e \
-"KEYMAP=ua-utf\nFONT=UniCyr_8x16" \
-> /etc/vconsole.conf
+echo "LANG=uk_UA.UTF-8" > /etc/locale.conf
+printf 'KEYMAP=ua-utf\nFONT=UniCyr_8x16\n' > /etc/vconsole.conf
 ```
 
-### Hostname
+#### Hostname
 
 ```bash
-echo \
-"arch" \
-> /etc/hostname
+echo "arch" > /etc/hostname
 ```
 
-### Bootloader
+#### Initramfs
 
-#### systemd-boot
+Compression (lz4 decompresses faster):
 
 ```bash
-bootctl install
-
-# add 'editor no' here after full system setup
-printf '%s\n' \
-'default arch.conf' \
-'timeout 5' \
-| tee /boot/loader/loader.conf > /dev/null
-
-# UUID refers to Filesystem UUID
-# if btrfs before rw should be 'rootflags=subvol=@'
-printf '%s\n' \
-'title   Arch Linux (Zen)' \
-'linux   /vmlinuz-linux-zen' \
-'initrd  /amd-ucode.img' \
-'initrd  /initramfs-linux-zen.img' \
-"options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rw" \
-| tee /boot/loader/entries/arch.conf > /dev/null
+sed -i 's/^#COMPRESSION="lz4"/COMPRESSION="lz4"/' /etc/mkinitcpio.conf
+sed -i 's/^#COMPRESSION_OPTIONS=()/COMPRESSION_OPTIONS=(-9)/' /etc/mkinitcpio.conf
 ```
 
-#### grub
+btrfs only: remove the `fsck` hook, because `fsck.btrfs` is a stub that does nothing:
 
 ```bash
-pacman -S grub efibootmgr
-
-grub-install /dev/nvme0n1
-
-grub-mkconfig -o /boot/grub/grub.cfg
+sed -i '/^HOOKS=/ s/ fsck//' /etc/mkinitcpio.conf
 ```
 
-#### If Windows is installed (only with grub)
+Build the images once, after all edits:
 
 ```bash
-pacman -S os-prober
-
-sed -i \
-'/^#GRUB_DISABLE_OS_PROBER=/ s/^#//' \
-/etc/default/grub
-
-grub-mkconfig -o /boot/grub/grub.cfg
+mkinitcpio -P
 ```
 
-### User management
+#### Users
 
-#### Set password for root
+Root password (interactive):
 
 ```bash
 passwd
 ```
 
-#### Add a new user
+Create the user with `sudo` access:
 
 ```bash
-sed -i \
-'/^# %wheel ALL=(ALL:ALL) ALL/ s/^# //' \
-/etc/sudoers
-
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 useradd -m -G wheel -s /bin/bash username
+```
 
+User password (interactive):
+
+```bash
 passwd username
 ```
 
-### Remove fsck from HOOKS (for btrfs)
-```bash
-sed -i \
-'s/\bfsck\b//g; s/  */ /g; s/( /(/' \
-/etc/mkinitcpio.conf
+#### Bootloader
 
-mkinitcpio -P
+```bash
+bootctl install
+systemctl enable systemd-boot-update.service
 ```
 
-### NetworkManager activation
+> `bootctl install` copies the EFI binary only once. The `systemd-boot-update` service updates it after `systemd` upgrades.
+
+Loader settings (add `editor no` here after the full system setup):
+
+```bash
+tee /boot/loader/loader.conf > /dev/null << 'EOF'
+default arch.conf
+timeout 5
+EOF
+```
+
+Boot entry for **btrfs**. `UUID` is the filesystem UUID, and it is the same for every subvolume:
+
+```bash
+tee /boot/loader/entries/arch.conf > /dev/null << EOF
+title   Arch Linux (Zen)
+linux   /vmlinuz-linux-zen
+initrd  /amd-ucode.img
+initrd  /initramfs-linux-zen.img
+options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rootflags=subvol=@ rw
+EOF
+```
+
+Boot entry for **ext4**:
+
+```bash
+tee /boot/loader/entries/arch.conf > /dev/null << EOF
+title   Arch Linux (Zen)
+linux   /vmlinuz-linux-zen
+initrd  /amd-ucode.img
+initrd  /initramfs-linux-zen.img
+options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rw
+EOF
+```
+
+#### NetworkManager
 
 ```bash
 systemctl enable NetworkManager
 ```
 
-### End of installation
+#### Finish
 
 ```bash
 exit
-
 umount -R /mnt
-
 reboot
 ```
 
-## Post-install
+## Part 2. Post-install
 
-### Connect to the Wi-Fi
+Log in as the new user. Start with these two steps.
+
+Connect to Wi-Fi (interactive; skip on Ethernet):
 
 ```bash
 nmtui
 ```
 
-### Pacman
+### 2.1 Pacman and mirrors
+
+Enable `multilib` (needed for Steam and 32-bit libraries), colors and parallel downloads:
 
 ```bash
-sudo sed -i \
-'/^#\[multilib\]/,/^#\Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' \
-/etc/pacman.conf
+sudo sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /etc/pacman.conf
+sudo sed -i 's/^#\?ParallelDownloads.*/ParallelDownloads = 10/' /etc/pacman.conf
+sudo sed -i 's/^#Color$/Color/' /etc/pacman.conf
+```
 
-sudo sed -i \
-'s/^ParallelDownloads = 5/ParallelDownloads = 10/' \
-/etc/pacman.conf
+Pick fast mirrors first, then update. This way the big downloads that follow (GNOME, NVIDIA) already use fast mirrors:
 
-sudo sed -i \
-'/^#Color$/ s/^#//' \
-/etc/pacman.conf
-
+```bash
+sudo pacman -S --needed reflector && \
+sudo reflector --protocol https --country Germany,Ukraine,Poland --age 6 --sort rate --save /etc/pacman.d/mirrorlist && \
 sudo pacman -Syu
 ```
 
-### NVIDIA GPU
+### 2.2 GPU drivers
+
+#### Common utilities (NVIDIA and AMD)
 
 ```bash
-# use 'nvidia-open' for stock linux kernel, 'nvidia-open-dkms' for custom kernels
-sudo pacman -S \
-nvidia-open-dkms nvidia-utils lib32-nvidia-utils \
-nvidia-settings --needed 
-
-sudo pacman -S \
+sudo pacman -S --needed \
 vulkan-icd-loader lib32-vulkan-icd-loader \
-opencl-nvidia libva libva-utils libva-nvidia-driver \
-vulkan-tools mesa-utils v4l-utils ffmpeg cuda --needed
-
-printf '%s\n' \
-'options nvidia_drm modeset=1' \
-| sudo tee /etc/modprobe.d/nvidia-drm.conf > /dev/null
-
-printf '%s\n' \
-'blacklist i2c_nvidia_gpu' \
-| sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null
-
-sudo sed -i \
-'s/^MODULES=(\(.*\))/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' \
-/etc/mkinitcpio.conf
-
-sudo mkinitcpio -P
-
-# for verification of installation
-sudo cat /proc/driver/nvidia/params
-```
-
-### AMD GPU
-
-```bash
-sudo pacman -S \
-mesa lib32-mesa \
-vulkan-radeon lib32-vulkan-radeon \
---needed
-
-sudo pacman -S \
-vulkan-icd-loader lib32-vulkan-icd-loader \
-libva-mesa-driver lib32-libva-mesa-driver \
 libva libva-utils vulkan-tools mesa-utils \
-v4l-utils ffmpeg --needed
+v4l-utils ffmpeg
 ```
 
-### GNOME
+#### NVIDIA (default)
+
+Use `nvidia-open` for the stock `linux` kernel and `nvidia-open-dkms` for `linux-zen` and other custom kernels. RTX 50-series cards work only with the open kernel modules.
 
 ```bash
-sudo pacman -S gnome
+sudo pacman -S --needed \
+nvidia-open-dkms nvidia-utils lib32-nvidia-utils \
+nvidia-settings libva-nvidia-driver
+```
 
-sudo systemctl enable gdm
+Optional: `opencl-nvidia` for OpenCL and `cuda` for CUDA development or ML (several GB):
 
+```bash
+sudo pacman -S --needed opencl-nvidia cuda
+```
+
+Optional, Turing cards only (RTX 20xx): stop the `i2c_nvidia_gpu` USB-C controller driver from loading and printing errors:
+
+```bash
+sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null << 'EOF'
+blacklist i2c_nvidia_gpu
+EOF
+```
+
+> `nvidia_drm modeset=1` and early loading of the NVIDIA modules in the initramfs are not needed: `nvidia-utils` enables modeset by default, and early loading breaks hibernation.
+> Verify after the first boot into GNOME, see [Quick checks](#quick-checks).
+
+#### AMD (alternative, or an AMD iGPU)
+
+```bash
+sudo pacman -S --needed \
+mesa lib32-mesa \
+vulkan-radeon lib32-vulkan-radeon
+```
+
+### 2.3 GNOME
+
+```bash
+sudo pacman -S gnome && \
+sudo systemctl enable gdm && \
 sudo reboot
 ```
 
-### Installation of basic programs
+#### Remove unneeded GNOME apps (optional)
 
-```bash
-sudo pacman -S \
-git dosfstools ntfs-3g btop nvtop \
-firefox telegram-desktop resources fastfetch luajit \
-qbittorrent obs-studio adw-gtk-theme papirus-icon-theme \
-gnome-browser-connector gnome-tweaks bash-completion --needed
-```
-
-### Sound and equalizer settings
-
-```bash
-sudo pacman -S \
-pipewire pipewire-pulse pipewire-alsa \
-alsa-utils wireplumber easyeffects --needed
-
-sudo pacman -S lsp-plugins-lv2 calf
-
-sudo curl -L \
-"https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/libdeep_filter_ladspa-0.5.6-x86_64-unknown-linux-gnu.so" \
--o /usr/lib/ladspa/libdeep_filter_ladspa.so
-```
-
-### Installation fonts
-
-```bash
-sudo pacman -S \
-ttf-liberation ttf-roboto ttf-jetbrains-mono-nerd \
-noto-fonts noto-fonts-cjk noto-fonts-emoji --needed
-```
-
-### Firewall settings
-
-```bash
-sudo pacman -S ufw gufw && \
-sudo systemctl enable --now ufw && \
-sudo ufw default deny incoming && \
-sudo ufw default allow outgoing && \
-sudo ufw enable
-
-# allow TCP traffic from local network
-sudo ufw allow from 192.168.0.0/24 to any port "PORT" proto tcp 
-```
-
-### Power profiles
-
-```bash
-sudo pacman -S power-profiles-daemon && \
-sudo systemctl enable --now power-profiles-daemon
-```
-
-### Gaming utils
-
-```bash
-sudo pacman -S steam
-
-sudo pacman -S gamemode lib32-gamemode && \
-sudo usermod -aG gamemode $(whoami)
-```
-
-### zsh
-
-```bash
-sudo pacman -S zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting
-
-chsh -s /bin/zsh
-
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-
-git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
-
-sed -i \
-'s#ZSH_THEME="robbyrussell"#if [ "$TERM" = "linux" ]; then\n  ZSH_THEME="robbyrussell"\nelse\n  ZSH_THEME="powerlevel10k/powerlevel10k"\nfi#' \
-~/.zshrc
-
-printf '%s\n' \
-"" \
-'# Plugins' \
-'source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' \
-'source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' \
->> ~/.zshrc
-
-printf '%s\n' \
-'include /usr/share/nano/*.nanorc' \
->> ~/.nanorc
-
-sudo chsh -s /bin/bash root
-```
-
-#### for better tty zsh style
-```bash
-if [ "$TERM" = "linux" ]; then
-  ZSH_THEME=""
-  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "
-else
-  ZSH_THEME="powerlevel10k/powerlevel10k"
-fi
-```
-
-### Dnsmasq
-
-```bash
-sudo pacman -S dnsmasq
-
-printf '%s\n' \
-'[main]' \
-'dns=dnsmasq' \
-| sudo tee /etc/NetworkManager/conf.d/dns.conf > /dev/null
-
-nmcli general reload
-```
-
-### Optimization mkinitcpio
-
-```bash
-sudo sed -i \
-'s/^#COMPRESSION="lz4"/COMPRESSION="lz4"/' \
-/etc/mkinitcpio.conf
-
-sudo sed -i \
-'s/^#COMPRESSION_OPTIONS=()/COMPRESSION_OPTIONS=(-9)/' \
-/etc/mkinitcpio.conf
-
-sudo mkinitcpio -P
-```
-
-### Activation everyweek TRIM (for EXT4)
-
-```bash
-sudo systemctl enable --now fstrim.timer
-```
-
-### Snapper
-
-```bash
-sudo pacman -S snapper snap-pac
-
-sudo snapper -c root create-config /
-
-sudo btrfs subvolume delete /.snapshots
-
-sudo mkdir -p /mnt/btrfs-root
-sudo mount -o subvol=/ /dev/nvme0n1p2 /mnt/btrfs-root
-sudo btrfs subvolume create /mnt/btrfs-root/@snapshots
-sudo umount /mnt/btrfs-root
-sudo rmdir /mnt/btrfs-root
-
-sudo mkdir /.snapshots
-sudo mount -o noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@snapshots /dev/nvme0n1p2 /.snapshots
-
-sudo chmod 750 /.snapshots
-sudo chown :wheel /.snapshots
-
-echo "UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) /.snapshots btrfs noatime,compress=zstd:3,ssd,space_cache=v2,subvol=@snapshots 0 0" | sudo tee -a /etc/fstab > /dev/null
-
-sudo snapper -c root set-config \
-"TIMELINE_CREATE=yes" \
-"TIMELINE_CLEANUP=yes" \
-"TIMELINE_LIMIT_HOURLY=5" \
-"TIMELINE_LIMIT_DAILY=7" \
-"TIMELINE_LIMIT_WEEKLY=0" \
-"TIMELINE_LIMIT_MONTHLY=0" \
-"TIMELINE_LIMIT_YEARLY=0"
-
-sudo systemctl enable --now snapper-timeline.timer snapper-cleanup.timer
-```
-
-### Extented configure locales
-
-```bash
-sudo sed -i -E 's/#\s*((en_DK|uk_UA).UTF-8 UTF-8)/\1/' /etc/locale.gen
-
-printf '%s\n' \
-'LANG=en_US.UTF-8' \
-'LC_TIME=en_DK.UTF-8' \
-'LC_MONETARY=uk_UA.UTF-8' \
-'LC_NUMERIC=uk_UA.UTF-8' \
-'LC_MEASUREMENT=uk_UA.UTF-8' \
-'LC_PAPER=uk_UA.UTF-8' \
-| sudo tee /etc/locale.conf > /dev/null
-```
-
-### Optimization pacman mirrors
-
-```bash
-sudo pacman -S reflector
-
-sudo reflector \
---protocol https \
---country Germany,Ukraine,Poland \
---age 6 \
---sort rate \
---save /etc/pacman.d/mirrorlist
-
-sudo pacman -Syyu
-```
-
-### Installation paru and pamac
-
-```bash
-git clone https://aur.archlinux.org/paru.git && \
-cd paru && makepkg -si
-
-paru -S pamac-aur
-```
-
-### Bluetooth
-
-```bash
-sudo pacman -S bluez bluez-utils --needed
-
-sudo systemctl enable --now bluetooth.service
-```
-
-### Cloudlfare WARP
-
-```bash
-paru -S cloudflare-warp-bin
-
-sudo systemctl enable --now warp-svc
-
-warp-cli registration new
-
-systemctl --user mask warp-taskbar
-```
-
-### SWAP
-
-#### zram-generator
-
-```bash
-sudo pacman -S zram-generator
-
-printf '%s\n' \
-'[zram0]' \
-'zram-size = ram / 2' \
-'compression-algorithm = lz4' \
-'swap-priority = 100' \
-| sudo tee /etc/systemd/zram-generator.conf > /dev/null
-```
-
-#### swapfile
-
-```bash
-# if ext4
-sudo fallocate -l 8G /swapfile && \
-sudo chmod 600 /swapfile && \
-sudo mkswap /swapfile && \
-sudo swapon /swapfile
-
-# if btrfs
-sudo truncate -s 0 /swapfile && \
-sudo chattr +C /swapfile && \
-sudo fallocate -l 8G /swapfile && \
-sudo chmod 600 /swapfile && \
-sudo mkswap /swapfile && \
-sudo swapon /swapfile
-
-printf '%s\n' \
-'/swapfile none swap defaults 0 0' \
-| sudo tee -a /etc/fstab > /dev/null
-
-printf '%s\n' \
-'vm.swappiness=10' \
-'vm.vfs_cache_pressure=50' \
-| sudo tee /etc/sysctl.d/99-sysctl.conf > /dev/null
-```
-
-### Change volume step
-
-```bash
-gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
-```
-
-### Recommended extensions
-
-- [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/)
-- [BlurMyShell](https://extensions.gnome.org/extension/3193/blur-my-shell/)
-- [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/)
-- [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
-- [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
-- [Weather Effect](https://extensions.gnome.org/extension/8848/weather-effect/)
-
-### Fix suspend on amdgpu
-
-#### if systemd-boot
-
-```bash
-sudo sed -i \
-'/^options/ s/$/ amdgpu.runpm=0/' \
-/boot/loader/entries/arch.conf
-```
-
-#### if grub
-
-```bash
-sudo sed -i \
-'s/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 amdgpu.runpm=0"/' \
-/etc/default/grub
-
-sudo grub-mkconfig -o /boot/grub/grub.cfg
-```
-
-### For caching new icons
-
-```bash
-sudo gtk-update-icon-cache -f -t /usr/share/icons/*
-```
-
-### Remove standart GNOME apps
+If `pacman` reports `target not found` for a name, delete that name from the list and run it again.
 
 ```bash
 sudo pacman -Rns \
@@ -665,56 +359,319 @@ gnome-system-monitor gnome-tour gnome-weather \
 baobab epiphany simple-scan papers snapshot
 ```
 
-### Cleaning GNOME of unnecessary programs (Be careful)
+### 2.4 Programs
+
+#### Basic programs
 
 ```bash
-sudo pacman -D --asdeps $(pacman -Qqg gnome)
-
-sudo pacman -D --asexplicit \
-gnome-shell mutter gdm gnome-control-center \
-gnome-console nautilus gnome-session \
-gnome-settings-daemon gnome-backgrounds \
-gvfs gvfs-mtp gnome-text-editor gnome-calculator \
-evince gnome-disk-utility gnome-logs \
-gnome-shell-extensions gnome-system-monitor \
-loupe sushi xdg-desktop-portal-gnome \
-xdg-user-dirs-gtk
-
-sudo pacman -Rsn $(pacman -Qqgdtt gnome)
-
-# removal unused dependencies
-sudo pacman -Rns $(pacman -Qdtq)
+sudo pacman -S --needed \
+git dosfstools ntfs-3g btop nvtop \
+man-db man-pages \
+firefox telegram-desktop resources fastfetch luajit \
+qbittorrent obs-studio adw-gtk-theme papirus-icon-theme \
+gnome-browser-connector gnome-tweaks bash-completion
 ```
 
-### Headphone front panel activation
+#### Fonts
 
 ```bash
-alsamixer # Line -> 100%
+sudo pacman -S --needed \
+ttf-liberation ttf-roboto ttf-jetbrains-mono-nerd \
+noto-fonts noto-fonts-cjk noto-fonts-emoji
+```
 
-sudo alsactl store
+#### Sound and equalizer
 
-mkdir -p ~/.config/autostart
+```bash
+sudo pacman -S --needed \
+pipewire pipewire-pulse pipewire-alsa \
+alsa-utils wireplumber easyeffects \
+lsp-plugins-lv2 calf
+```
 
-cat << 'EOF' > ~/.config/autostart/amixer.sh
-#!/bin/bash
-for card in 0 1; do
-    amixer -c $card sset "Headphone" 100% unmute 2>/dev/null || true
-    amixer -c $card sset "Front" 100% unmute 2>/dev/null || true
-done
+DeepFilterNet noise suppression plugin:
+
+```bash
+sudo mkdir -p /usr/lib/ladspa && \
+sudo curl -L "https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/libdeep_filter_ladspa-0.5.6-x86_64-unknown-linux-gnu.so" -o /usr/lib/ladspa/libdeep_filter_ladspa.so
+```
+
+#### Gaming
+
+```bash
+sudo pacman -S steam gamemode lib32-gamemode && \
+sudo usermod -aG gamemode "$USER"
+```
+
+### 2.5 System settings
+
+#### Firewall
+
+```bash
+sudo pacman -S --needed ufw gufw && \
+sudo systemctl enable --now ufw && \
+sudo ufw default deny incoming && \
+sudo ufw default allow outgoing && \
+sudo ufw enable
+```
+
+Allow TCP traffic from the local network (replace `PORT`):
+
+```bash
+sudo ufw allow from 192.168.0.0/24 to any port PORT proto tcp
+```
+
+#### Power profiles
+
+Mostly useful on laptops:
+
+```bash
+sudo pacman -S --needed power-profiles-daemon && \
+sudo systemctl enable --now power-profiles-daemon
+```
+
+#### Bluetooth
+
+```bash
+sudo pacman -S --needed bluez bluez-utils && \
+sudo systemctl enable --now bluetooth.service
+```
+
+#### Local DNS cache (dnsmasq)
+
+```bash
+sudo tee /etc/NetworkManager/conf.d/dns.conf > /dev/null << 'EOF'
+[main]
+dns=dnsmasq
 EOF
+sudo pacman -S --needed dnsmasq && nmcli general reload
+```
 
-chmod +x ~/.config/autostart/amixer.sh
+#### Package cache cleanup
 
-cat << 'EOF' > ~/.config/autostart/amixer.desktop
-[Desktop Entry]
-Name=Amixer Headphone Fix
-Comment=Enable headphone front panel on startup
-Exec=/bin/bash -c "~/.config/autostart/amixer.sh"
-Type=Application
-Terminal=true
-Hidden=false
-StartupNotify=false
-X-GNOME-Autostart-enabled=true
-Icon=music
+`paccache` keeps the last 3 versions of every package and runs weekly:
+
+```bash
+sudo pacman -S --needed pacman-contrib && \
+sudo systemctl enable --now paccache.timer
+```
+
+#### Swap on zram
+
+```bash
+sudo pacman -S --needed zram-generator
+```
+
+```bash
+sudo tee /etc/systemd/zram-generator.conf > /dev/null << 'EOF'
+[zram0]
+zram-size = min(ram / 2, 8192)
+compression-algorithm = lz4
+swap-priority = 100
 EOF
 ```
+
+Reboot to activate it (the generator runs at boot).
+
+> `min(ram / 2, 8192)` means half of the RAM, but at most 8 GiB. zram is compressed RAM, so a bigger device only matters under extreme memory pressure, and 8 GiB is plenty on 16 to 32 GB machines.
+> `lz4` is faster and uses less CPU than `zstd`, at the cost of a lower compression ratio. This is a good fit for gaming.
+
+Optional tuning for swap on zram (recommended by the Arch Wiki):
+
+```bash
+sudo tee /etc/sysctl.d/99-zram.conf > /dev/null << 'EOF'
+vm.swappiness=180
+vm.page-cluster=0
+EOF
+```
+
+### 2.6 Shell: zsh
+
+Packages:
+
+```bash
+sudo pacman -S --needed zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting
+```
+
+Oh My Zsh, Powerlevel10k and the config (non-interactive; `RUNZSH=no CHSH=no` stop the installer from switching shells in the middle of the block):
+
+```bash
+RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
+sed -i 's#^ZSH_THEME=.*#if [ "$TERM" = "linux" ]; then\n  ZSH_THEME="robbyrussell"\nelse\n  ZSH_THEME="powerlevel10k/powerlevel10k"\nfi#' ~/.zshrc
+cat >> ~/.zshrc << 'EOF'
+
+# Plugins (zsh-syntax-highlighting must be sourced last)
+source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+EOF
+```
+
+Nano syntax highlighting:
+
+```bash
+echo 'include /usr/share/nano/*.nanorc' >> ~/.nanorc
+```
+
+Make zsh the login shell
+
+```bash
+chsh -s /bin/zsh
+```
+
+Optional, a simpler prompt in the TTY. In `~/.zshrc`, replace the `if [ "$TERM" = "linux" ]; then ... fi` block with:
+
+```bash
+if [ "$TERM" = "linux" ]; then
+  ZSH_THEME=""
+  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "
+else
+  ZSH_THEME="powerlevel10k/powerlevel10k"
+fi
+```
+
+### 2.7 AUR
+
+#### paru and pamac
+
+```bash
+git clone https://aur.archlinux.org/paru.git /tmp/paru && \
+cd /tmp/paru && \
+makepkg -si && \
+cd ~ && \
+rm -rf /tmp/paru
+```
+
+```bash
+paru -S pamac-aur
+```
+
+#### Cloudflare WARP (optional)
+
+```bash
+paru -S cloudflare-warp-bin && \
+sudo systemctl enable --now warp-svc && \
+sleep 2 && \
+warp-cli --accept-tos registration new && \
+warp-cli connect && \
+systemctl --user mask warp-taskbar
+```
+
+### 2.8 GNOME settings
+
+Volume step of the media keys:
+
+```bash
+gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
+```
+
+Recommended extensions:
+
+- [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/)
+- [Blur My Shell](https://extensions.gnome.org/extension/3193/blur-my-shell/)
+- [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/)
+- [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/)
+- [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
+- [Weather Effect](https://extensions.gnome.org/extension/8848/weather-effect/)
+
+## Optional
+
+### Weekly TRIM (ext4)
+
+Not needed on btrfs: modern kernels trim it asynchronously by themselves.
+
+```bash
+sudo systemctl enable --now fstrim.timer
+```
+
+### Snapper snapshots (btrfs)
+
+Requires the `@var_log` and `@pkg` subvolumes.
+
+```bash
+mount /dev/nvme0n1p2 /mnt
+btrfs subvolume create /mnt/@var_log
+btrfs subvolume create /mnt/@pkg
+umount /mnt
+```
+
+```bash
+sudo pacman -S --needed snapper snap-pac
+```
+
+Move the snapshots to a dedicated `@snapshots` subvolume:
+
+```bash
+sudo snapper -c root create-config /
+sudo btrfs subvolume delete /.snapshots
+sudo mkdir -p /mnt/btrfs-root
+sudo mount -o subvol=/ /dev/nvme0n1p2 /mnt/btrfs-root
+sudo btrfs subvolume create /mnt/btrfs-root/@snapshots
+sudo umount /mnt/btrfs-root
+sudo rmdir /mnt/btrfs-root
+sudo mkdir /.snapshots
+sudo mount -o noatime,compress=zstd:3,subvol=@snapshots /dev/nvme0n1p2 /.snapshots
+sudo chmod 750 /.snapshots
+sudo chown :wheel /.snapshots
+echo "UUID=$(sudo blkid -s UUID -o value /dev/nvme0n1p2) /.snapshots btrfs noatime,compress=zstd:3,subvol=@snapshots 0 0" | sudo tee -a /etc/fstab > /dev/null
+```
+
+Retention (5 hourly, 7 daily) and timers:
+
+```bash
+sudo snapper -c root set-config \
+"TIMELINE_CREATE=yes" "TIMELINE_CLEANUP=yes" \
+"TIMELINE_LIMIT_HOURLY=5" "TIMELINE_LIMIT_DAILY=7" \
+"TIMELINE_LIMIT_WEEKLY=0" "TIMELINE_LIMIT_MONTHLY=0" "TIMELINE_LIMIT_YEARLY=0"
+sudo systemctl enable --now snapper-timeline.timer snapper-cleanup.timer
+```
+
+> With systemd-boot the kernel lives on the ESP and is **not** part of a snapshot. After a rollback the old `/usr/lib/modules` no longer matches the running kernel, so reboot into a matching kernel then reinstall `linux-zen` so that the kernel on the ESP matches the modules.
+> `genfstab` writes `subvolid=` into `/etc/fstab`. Remove it from the options if you plan to roll back snapshots.
+
+### Swapfile
+
+Not needed with 16 GB or more and zram. It is only useful for hibernation, which also requires the `resume` hook and `resume_offset`, and these are not configured in this guide.
+
+ext4:
+
+```bash
+sudo fallocate -l 8G /swapfile && \
+sudo chmod 600 /swapfile && \
+sudo mkswap /swapfile && \
+sudo swapon /swapfile
+```
+
+btrfs (creates a swapfile without compression and copy-on-write). With Snapper keep it in its own subvolume, because a subvolume with an active swapfile cannot be snapshotted:
+
+```bash
+sudo btrfs filesystem mkswapfile --size 8g /swapfile && \
+sudo swapon /swapfile
+```
+
+Add it to `fstab`:
+
+```bash
+echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab > /dev/null
+```
+
+Swap tuning, **without** zram only:
+
+```bash
+sudo tee /etc/sysctl.d/99-sysctl.conf > /dev/null << 'EOF'
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+EOF
+```
+
+## Quick checks
+
+| What | Command | Expected |
+| --- | --- | --- |
+| NVIDIA params | `sudo cat /proc/driver/nvidia/params` | Configurations related to NVIDIA |
+| NVIDIA DRM modeset | `cat /sys/module/nvidia_drm/parameters/modeset` | `Y` |
+| Active swap (zram) | `swapon --show` | `/dev/zram0` |
+| zswap is not doubling zram | `cat /sys/module/zswap/parameters/enabled` | `N`. If `Y`, add `zswap.enabled=0` to the kernel options (`options` in `arch.conf`, or `GRUB_CMDLINE_LINUX_DEFAULT`) |
+| Bootloader | `bootctl status` | systemd-boot is installed, Windows entry is listed |
+| Filesystem | `findmnt -no OPTIONS /` | `compress=zstd:3` and `subvol=/@` (btrfs) |
+| Time sync | `timedatectl` | `System clock synchronized: yes` |
