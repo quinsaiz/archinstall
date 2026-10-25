@@ -284,7 +284,7 @@ sudo sed -i 's/^#\?ParallelDownloads.*/ParallelDownloads = 10/' /etc/pacman.conf
 sudo sed -i 's/^#Color$/Color/' /etc/pacman.conf
 ```
 
-Pick fast mirrors first, then update. This way the big downloads that follow (GNOME, NVIDIA) already use fast mirrors:
+Pick fast mirrors first, then update. This way the big downloads that follow (desktop environment, NVIDIA) already use fast mirrors:
 
 ```bash
 sudo pacman -S --needed reflector && \
@@ -328,7 +328,8 @@ EOF
 ```
 
 > `nvidia_drm modeset=1` and early loading of the NVIDIA modules in the initramfs are not needed: `nvidia-utils` enables modeset by default, and early loading breaks hibernation.
-> Verify after the first boot into GNOME, see [Quick checks](#quick-checks).
+> Verify after the first boot into the desktop, see [Quick checks](#quick-checks).
+> Sleep: with driver 595 or newer (open modules) the kernel suspend notifiers save video memory by themselves, so keep the `nvidia-suspend`, `nvidia-resume` and `nvidia-hibernate` services disabled (the package disables them). Enabling them is only needed with older drivers.
 
 #### AMD (alternative, or an AMD iGPU)
 
@@ -338,7 +339,9 @@ mesa lib32-mesa \
 vulkan-radeon lib32-vulkan-radeon
 ```
 
-### 2.3 GNOME
+### 2.3 Desktop environment
+
+#### GNOME
 
 ```bash
 sudo pacman -S gnome && \
@@ -347,8 +350,6 @@ sudo reboot
 ```
 
 #### Remove unneeded GNOME apps (optional)
-
-If `pacman` reports `target not found` for a name, delete that name from the list and run it again.
 
 ```bash
 sudo pacman -Rns \
@@ -359,6 +360,30 @@ gnome-system-monitor gnome-tour gnome-weather \
 baobab epiphany simple-scan papers snapshot
 ```
 
+#### KDE Plasma
+
+```bash
+sudo pacman -S --needed \
+plasma-desktop plasma-login-manager \
+plasma-nm plasma-pa powerdevil kscreen \
+kde-gtk-config breeze-gtk xdg-desktop-portal-kde \
+plasma-systemmonitor kinfocenter plasma-firewall \
+plasma-browser-integration \
+kwallet kwallet-pam kwalletmanager && \
+sudo systemctl enable plasmalogin && \
+sudo reboot
+```
+
+KDE apps (`plasma-desktop` does not include them):
+
+```bash
+sudo pacman -S --needed konsole dolphin kate ark spectacle gwenview okular
+```
+
+##### KWallet
+
+Needed by VS Code and other apps that store secrets. After the first login open `kwalletmanager` and create a wallet named `kdewallet` with **Blowfish** encryption (not GPG) and **the same password as your user login**. `kwallet-pam` unlocks it at login only if the passwords match.
+
 ### 2.4 Programs
 
 #### Basic programs
@@ -366,10 +391,15 @@ baobab epiphany simple-scan papers snapshot
 ```bash
 sudo pacman -S --needed \
 git dosfstools ntfs-3g btop nvtop \
-man-db man-pages \
-firefox telegram-desktop resources fastfetch luajit \
-qbittorrent obs-studio adw-gtk-theme papirus-icon-theme \
-gnome-browser-connector gnome-tweaks bash-completion
+firefox telegram-desktop fastfetch luajit \
+qbittorrent obs-studio papirus-icon-theme \
+bash-completion
+```
+
+GNOME only:
+
+```bash
+sudo pacman -S --needed resources adw-gtk-theme gnome-browser-connector gnome-tweaks
 ```
 
 #### Fonts
@@ -408,7 +438,7 @@ sudo usermod -aG gamemode "$USER"
 #### Firewall
 
 ```bash
-sudo pacman -S --needed ufw gufw && \
+sudo pacman -S --needed ufw && \
 sudo systemctl enable --now ufw && \
 sudo ufw default deny incoming && \
 sudo ufw default allow outgoing && \
@@ -421,9 +451,9 @@ Allow TCP traffic from the local network (replace `PORT`):
 sudo ufw allow from 192.168.0.0/24 to any port PORT proto tcp
 ```
 
-#### Power profiles
+GUI: on GNOME install `gufw`, on KDE `plasma-firewall` is already installed (System Settings → Firewall).
 
-Mostly useful on laptops:
+#### Power profiles
 
 ```bash
 sudo pacman -S --needed power-profiles-daemon && \
@@ -436,6 +466,8 @@ sudo systemctl enable --now power-profiles-daemon
 sudo pacman -S --needed bluez bluez-utils && \
 sudo systemctl enable --now bluetooth.service
 ```
+
+> KDE also needs the tray widget `bluedevil` and settings page:
 
 #### Local DNS cache (dnsmasq)
 
@@ -471,7 +503,17 @@ swap-priority = 100
 EOF
 ```
 
-Reboot to activate it (the generator runs at boot).
+Disable zswap, so that pages are not compressed twice (once by zswap, then again by zram). Append `zswap.enabled=0` to the `options` line of the boot entry.
+
+```bash
+sudo nano /boot/loader/entries/arch.conf
+```
+
+The line should end like this:
+
+```text
+options root=UUID=... rw zswap.enabled=0
+```
 
 > `min(ram / 2, 8192)` means half of the RAM, but at most 8 GiB. zram is compressed RAM, so a bigger device only matters under extreme memory pressure, and 8 GiB is plenty on 16 to 32 GB machines.
 > `lz4` is faster and uses less CPU than `zstd`, at the cost of a lower compression ratio. This is a good fit for gaming.
@@ -557,7 +599,24 @@ warp-cli connect && \
 systemctl --user mask warp-taskbar
 ```
 
-### 2.8 GNOME settings
+### 2.8 Desktop settings
+
+#### Regional formats
+
+English system language, with formats set separately (ISO dates and 24-hour time from `en_DK`, numbers, currency, units and paper size from `uk_UA`):
+
+```bash
+sudo tee /etc/locale.conf > /dev/null << 'EOF'
+LANG=en_US.UTF-8
+LC_TIME=en_DK.UTF-8
+LC_MONETARY=uk_UA.UTF-8
+LC_NUMERIC=uk_UA.UTF-8
+LC_MEASUREMENT=uk_UA.UTF-8
+LC_PAPER=uk_UA.UTF-8
+EOF
+```
+
+#### GNOME
 
 Volume step of the media keys:
 
@@ -664,14 +723,56 @@ vm.vfs_cache_pressure=50
 EOF
 ```
 
+### Secure Boot (sbctl)
+
+For systemd-boot with a signed kernel (no UKI). Windows keeps booting, because the Microsoft keys stay enrolled.
+
+> Dual boot with Windows: if BitLocker or device encryption is on, changing the Secure Boot keys asks for the recovery key on the next Windows boot. Check in an administrator PowerShell: `manage-bde -status`.
+
+Install:
+
+```bash
+sudo pacman -S --needed sbctl
+```
+
+Put the firmware into Setup Mode. In the UEFI setup open Secure Boot, set the mode to `Custom` and clear the keys (the names differ between vendors). Then check that `Setup Mode` is `Enabled`:
+
+```bash
+sbctl status
+```
+
+Create the keys and enroll them together with the Microsoft keys (`-m`):
+
+```bash
+sudo sbctl create-keys
+sudo sbctl enroll-keys -m
+```
+
+Sign the kernel and the boot loader. `-s` saves the file in the sbctl database, so the pacman hook signs it again after every update:
+
+```bash
+sudo sbctl sign -s /boot/vmlinuz-linux-zen
+sudo sbctl sign -s /boot/EFI/systemd/systemd-bootx64.efi
+sudo sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+sudo sbctl sign -s -o /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+```
+
+Check (the Windows files on the shared ESP are listed as not signed, ignore them):
+
+```bash
+sudo sbctl verify 2>&1 | grep -E "vmlinuz|systemd-boot|BOOTX64"
+```
+
 ## Quick checks
 
 | What | Command | Expected |
 | --- | --- | --- |
 | NVIDIA params | `sudo cat /proc/driver/nvidia/params` | Configurations related to NVIDIA |
 | NVIDIA DRM modeset | `cat /sys/module/nvidia_drm/parameters/modeset` | `Y` |
+| NVIDIA suspend path | `sudo cat /proc/driver/nvidia/params \| grep UseKernelSuspendNotifiers` | `UseKernelSuspendNotifiers: 1` |
 | Active swap (zram) | `swapon --show` | `/dev/zram0` |
 | zswap is not doubling zram | `cat /sys/module/zswap/parameters/enabled` | `N`. If `Y`, add `zswap.enabled=0` to the kernel options (`options` in `arch.conf`, or `GRUB_CMDLINE_LINUX_DEFAULT`) |
 | Bootloader | `bootctl status` | systemd-boot is installed, Windows entry is listed |
 | Filesystem | `findmnt -no OPTIONS /` | `compress=zstd:3` and `subvol=/@` (btrfs) |
 | Time sync | `timedatectl` | `System clock synchronized: yes` |
+| KWallet (KDE) | `qdbus6 org.kde.kwalletd6 /modules/kwalletd6 org.kde.KWallet.isOpen kdewallet` | `true` |
