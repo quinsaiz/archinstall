@@ -145,11 +145,9 @@ ask_password() {
 	local -n __out=$1
 	local a b
 	while true; do
+		IFS= read -rsp "Password for $2: " a
+		echo
 		IFS= read -rsp "Repeat password: " b
-		echo
-		echo
-		IFS= read -rsp "Repeat password: " b
-		echo
 		echo
 		if [[ -n $a && $a == "$b" ]]; then
 			__out=$a
@@ -163,7 +161,7 @@ ask_partition() {
 	local -n __out=$1
 	local reply
 	while true; do
-		read -rp "$2 (e.g. /dev/nvme0n1p2): " reply
+		read -rp "$2 (e.g. /dev/nvme0n1p1): " reply
 		if [[ -b $reply && $(lsblk -dno TYPE "$reply") == part ]]; then
 			__out=$reply
 			return 0
@@ -505,6 +503,7 @@ chroot_initramfs() {
 	if ! grep -q '^# arch-setup' /etc/mkinitcpio.conf; then
 		cat >>/etc/mkinitcpio.conf <<'EOF'
 
+# arch-setup
 COMPRESSION="lz4"
 COMPRESSION_OPTIONS=(-9)
 EOF
@@ -762,6 +761,7 @@ step_shell() {
 	if ! grep -q '^# arch-setup plugins' "$HOME/.zshrc"; then
 		cat >>"$HOME/.zshrc" <<'EOF'
 
+# arch-setup plugins (zsh-syntax-highlighting must be sourced last)
 source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 EOF
