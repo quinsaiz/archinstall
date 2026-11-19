@@ -27,7 +27,7 @@ readonly ESP_OPTS="fmask=0077,dmask=0077"
 
 GPU_COMMON_PKGS=(
   vulkan-icd-loader lib32-vulkan-icd-loader
-  libva libva-utils vulkan-tools mesa-utils v4l-utils ffmpeg
+  libva libva-utils vulkan-tools mesa-utils v4l-utils
 )
 
 FONT_PKGS=(
@@ -62,8 +62,8 @@ GNOME_REMOVE=(
 )
 
 BASIC_PKGS=(
-  git dosfstools ntfs-3g btop nvtop fastfetch
-  firefox telegram-desktop obs-studio luajit
+  dosfstools ntfs-3g btop nvtop fastfetch ffmpeg
+  git firefox telegram-desktop obs-studio luajit 
   qbittorrent papirus-icon-theme bash-completion
 )
 
