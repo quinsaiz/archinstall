@@ -1,73 +1,91 @@
-# Arch Linux installation guide
+# Arch Linux Installation & Setup Guide
+
+Step-by-step guide for installing and configuring **Arch Linux** (UEFI, `systemd-boot`, `btrfs` or `ext4`).
 
 ## Contents
 
-- [Part 1. Installation](#part-1-installation)
-- [Part 2. Post-install](#part-2-post-install)
-- [Optional](#optional)
-- [Quick checks](#quick-checks)
+- [Quick Start with the Script](#quick-start-with-the-script)
+- [Part 1. Base System Installation (Live ISO)](#part-1-base-system-installation-live-iso)
+  - [1.1 Preparation and Network](#11-preparation-and-network)
+  - [1.2 Disk Partitioning](#12-disk-partitioning)
+  - [1.3 Filesystem and Mounting](#13-filesystem-and-mounting)
+  - [1.4 Base System Packages](#14-base-system-packages)
+  - [1.5 Configuration Inside arch-chroot](#15-configuration-inside-arch-chroot)
+- [Part 2. Post-install Setup](#part-2-post-install-setup)
+  - [2.1 Pacman and Mirrors](#21-pacman-and-mirrors)
+  - [2.2 GPU Drivers](#22-gpu-drivers)
+  - [2.3 Desktop Environment (DE)](#23-desktop-environment-de)
+  - [2.4 Applications, Fonts, Audio, and Gaming](#24-applications-fonts-audio-and-gaming)
+  - [2.5 System Services and zram](#25-system-services-and-zram)
+  - [2.6 Shell: Zsh + Starship](#26-shell-zsh--starship)
+  - [2.7 AUR (paru, pamac, WARP)](#27-aur-paru-pamac-warp)
+  - [2.8 Final DE and Security Settings](#28-final-de-and-security-settings)
+- [Optional Settings (Manual)](#optional-settings-manual)
+- [Quick System Checks](#quick-system-checks)
 
-## Part 1. Installation
+## Quick Start with the Script
 
-Everything in this part is run from the live ISO, and after `arch-chroot` inside the new system.
+When using `arch-setup.sh`, the script automatically detects the environment (Live ISO or installed system), or accepts an explicit mode:
 
-### 1.1 Preparation
+| Command | Environment | Description |
+| --- | --- | --- |
+| `./arch-setup.sh` | Auto | Runs `install` on the Live ISO or `post` on an installed system |
+| `./arch-setup.sh install` | Live ISO (`root`) | Partitioning (`cfdisk`), formatting, `pacstrap`, `fstab`, `chroot`, `systemd-boot` |
+| `./arch-setup.sh post` | User | GPU drivers, KDE/GNOME, apps, `ufw`, `zram`, `zsh + starship`, Snapper |
+| `./arch-setup.sh shell` | User | Installs and configures `zsh + starship` only |
+| `./arch-setup.sh check` | User | Verifies GPU, `zram`, `zswap`, `systemd-boot`, services, KDE shortcut duplicates, and KWallet |
 
-#### System clock
+> **Note:** Disk partitioning (`cfdisk`), connecting to Wi-Fi on the Live ISO, and the `i2c_nvidia_gpu` fix are intentionally manual steps.
+
+## Part 1. Base System Installation (Live ISO)
+
+Everything in this section is run from the **Arch Linux Live ISO**, and after `arch-chroot` inside the new system.
+
+### 1.1 Preparation and Network
+
+#### Synchronize System Clock
 
 ```bash
 timedatectl set-ntp true
 ```
 
-#### Wi-Fi
+#### Connect to Wi-Fi (skip on Ethernet)
 
 ```bash
 rfkill unblock wifi
 iw dev wlan0 scan | grep SSID
-```
-
-```bash
 iwctl --passphrase "password" station wlan0 connect "SSID"
 ```
 
-### 1.2 Partitions
+### 1.2 Disk Partitioning
 
-#### Create partitions (interactive)
-
-```bash
-fdisk -l
-```
+Inspect available drives and create partitions interactively:
 
 ```bash
 cfdisk /dev/nvme0n1
 ```
 
-#### EFI partition
-
-Format (new ESP only):
+Format **only a newly created** ESP:
 
 ```bash
-mkfs.vfat -F32 -n "efi" /dev/nvme0n1p1
+mkfs.vfat -F32 -n EFI /dev/nvme0n1p1
 ```
 
-> Formatting a shared ESP deletes the Windows boot files.
-> systemd-boot keeps the kernel and initramfs on the ESP (mounted at `/boot`), so a shared ESP should be at least 512 MB. The one created by the Windows installer is often only about 100 MB.
+### 1.3 Filesystem and Mounting
 
-### 1.3 Filesystem
+#### Option A: btrfs (default)
 
-#### btrfs (default)
-
-Create the subvolumes:
+Create the base subvolumes:
 
 ```bash
-mkfs.btrfs -L "arch" /dev/nvme0n1p2
+mkfs.btrfs -f -L arch /dev/nvme0n1p2
 mount /dev/nvme0n1p2 /mnt
 btrfs subvolume create /mnt/@
 btrfs subvolume create /mnt/@home
 umount /mnt
 ```
 
-Mount them (`ssd` and `space_cache=v2` are detected or enabled by default, so they are not needed):
+Mount the subvolumes (`ssd` and `space_cache=v2` are enabled automatically by modern kernels):
 
 ```bash
 mount -o noatime,compress=zstd:3,subvol=@ /dev/nvme0n1p2 /mnt
@@ -75,90 +93,113 @@ mount --mkdir -o noatime,compress=zstd:3,subvol=@home /dev/nvme0n1p2 /mnt/home
 mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
 ```
 
----
+<details>
+<summary>Optional: Extra subvolumes for Snapper (<code>@var_log</code>, <code>@pkg</code>)</summary>
 
-Optional, only for Snapper: extra subvolumes for logs and the package cache, so that they are not rolled back together with `/`:
+Prevents system logs and the package cache from being rolled back together with `/`:
 
 ```bash
 mount /dev/nvme0n1p2 /mnt
 btrfs subvolume create /mnt/@var_log
 btrfs subvolume create /mnt/@pkg
 umount /mnt
-```
 
-```bash
 mount --mkdir -o noatime,compress=zstd:3,subvol=@var_log /dev/nvme0n1p2 /mnt/var/log
 mount --mkdir -o noatime,compress=zstd:3,subvol=@pkg /dev/nvme0n1p2 /mnt/var/cache/pacman/pkg
 ```
 
-> Run the second Snapper block after the main mounts above, so that `/mnt` is already mounted.
+</details>
 
----
-
-#### ext4 (alternative)
+#### Option B: ext4 (alternative)
 
 ```bash
-mkfs.ext4 -L "arch" /dev/nvme0n1p2
-mkfs.ext4 -L "home" /dev/nvme0n1p3
+mkfs.ext4 -F -L "arch" /dev/nvme0n1p2
+mkfs.ext4 -F -L "home" /dev/nvme0n1p3
+
 mount /dev/nvme0n1p2 /mnt
 mount --mkdir /dev/nvme0n1p3 /mnt/home
 mount --mkdir -o fmask=0077,dmask=0077 /dev/nvme0n1p1 /mnt/boot
 ```
 
-### 1.4 Base system
+### 1.4 Base System Packages
+
+Replace `amd-ucode` with `intel-ucode` for Intel CPUs, and `linux-zen` with `linux` if preferred:
 
 ```bash
-pacstrap /mnt base base-devel \
-linux-zen linux-zen-headers \
-linux-firmware amd-ucode \
-networkmanager nano
+pacstrap -K /mnt base base-devel \
+  linux-zen linux-zen-headers \
+  linux-firmware amd-ucode \
+  networkmanager nano
 ```
 
-btrfs only (`base` does not ship the btrfs tools: `btrfs subvolume`, `scrub`, `filesystem usage`):
+For **btrfs** only (`base` does not ship btrfs management tools):
 
 ```bash
 pacstrap /mnt btrfs-progs
 ```
 
-### 1.5 Configure the system
+### 1.5 Configuration Inside arch-chroot
 
-#### Generate fstab and enter the new system
+#### Generate `fstab` and Enter the New System
 
 ```bash
-genfstab -U /mnt >> /mnt/etc/fstab
+genfstab -U /mnt > /mnt/etc/fstab
+```
+
+For **btrfs**, strip `subvolid=` so snapshot rollbacks work cleanly:
+
+```bash
+sed -i -E 's/subvolid=[0-9]+,//g' /mnt/etc/fstab
+```
+
+Enter the new system:
+
+```bash
 arch-chroot /mnt
 ```
 
-#### Time
+#### Time Zone
 
 ```bash
 ln -sf /usr/share/zoneinfo/Europe/Kyiv /etc/localtime
 hwclock --systohc
 ```
 
-> Dual boot: Windows keeps local time in the hardware clock, Linux keeps UTC, so the time jumps after switching systems.
-> Fix it on the Windows side (PowerShell as administrator):
+> **Dual boot with Windows:** Windows stores local time in the hardware clock (RTC), whereas Linux uses UTC. To prevent clock drift when switching OSes, run this in an administrator PowerShell on Windows:
 >
 > ```powershell
 > reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /d 1 /t REG_QWORD /f
 > ```
 >
-> Also disable Windows Fast Startup if you mount NTFS partitions from Linux.
+> Also disable Windows **Fast Startup** if you mount NTFS partitions from Linux.
 
-#### Localization
+#### Localization and Regional Formats
+
+English system language (`en_US`), ISO dates and 24-hour time (`en_DK`), and Ukrainian formats for numbers, currency, measurement units, and paper size (`uk_UA`):
 
 ```bash
 sed -i -E 's/^#\s*((en_US|en_DK|uk_UA)\.UTF-8 UTF-8)/\1/' /etc/locale.gen
 locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
+
+cat > /etc/locale.conf << 'EOF'
+LANG=en_US.UTF-8
+LC_TIME=en_DK.UTF-8
+LC_MONETARY=uk_UA.UTF-8
+LC_NUMERIC=uk_UA.UTF-8
+LC_MEASUREMENT=uk_UA.UTF-8
+LC_PAPER=uk_UA.UTF-8
+EOF
 ```
 
-Optional, Ukrainian system language and console (use instead of the `LANG` line above):
+<details>
+<summary>Optional: Full Ukrainian system interface and TTY console</summary>
 
 ```bash
 echo "LANG=uk_UA.UTF-8" > /etc/locale.conf
 printf 'KEYMAP=ua-utf\nFONT=UniCyr_8x16\n' > /etc/vconsole.conf
 ```
+
+</details>
 
 #### Hostname
 
@@ -166,117 +207,83 @@ printf 'KEYMAP=ua-utf\nFONT=UniCyr_8x16\n' > /etc/vconsole.conf
 echo "arch" > /etc/hostname
 ```
 
-#### Initramfs
+#### Initramfs (`mkinitcpio`)
 
-Compression (lz4 decompresses faster):
+Enable fast `lz4` decompression:
 
 ```bash
-sed -i 's/^#COMPRESSION="lz4"/COMPRESSION="lz4"/' /etc/mkinitcpio.conf
-sed -i 's/^#COMPRESSION_OPTIONS=()/COMPRESSION_OPTIONS=(-9)/' /etc/mkinitcpio.conf
+cat >> /etc/mkinitcpio.conf << 'EOF'
+
+COMPRESSION="lz4"
+COMPRESSION_OPTIONS=(-9)
+EOF
 ```
 
-btrfs only: remove the `fsck` hook, because `fsck.btrfs` is a stub that does nothing:
+For **btrfs** only — remove the `fsck` hook (`fsck.btrfs` is a no-op stub):
 
 ```bash
 sed -i '/^HOOKS=/ s/ fsck//' /etc/mkinitcpio.conf
 ```
 
-Build the images once, after all edits:
+Build the initramfs images:
 
 ```bash
 mkinitcpio -P
 ```
 
-#### Users
-
-Root password (interactive):
+#### Users and `sudo` Access
 
 ```bash
 passwd
-```
-
-Create the user with `sudo` access:
-
-```bash
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel
+chmod 440 /etc/sudoers.d/10-wheel
 useradd -m -G wheel -s /bin/bash username
-```
-
-User password (interactive):
-
-```bash
 passwd username
 ```
 
-#### Bootloader
+#### Bootloader (`systemd-boot`)
 
 ```bash
 bootctl install
 systemctl enable systemd-boot-update.service
-```
 
-> `bootctl install` copies the EFI binary only once. The `systemd-boot-update` service updates it after `systemd` upgrades.
-
-Loader settings (add `editor no` here after the full system setup):
-
-```bash
 tee /boot/loader/loader.conf > /dev/null << 'EOF'
 default arch.conf
 timeout 5
 EOF
 ```
 
-Boot entry for **btrfs**. `UUID` is the filesystem UUID, and it is the same for every subvolume:
+Boot entry for **btrfs** (`zswap.enabled=0` disables zswap upfront in favor of zram):
 
 ```bash
 tee /boot/loader/entries/arch.conf > /dev/null << EOF
-title   Arch Linux (Zen)
+title   Arch Linux
 linux   /vmlinuz-linux-zen
 initrd  /amd-ucode.img
 initrd  /initramfs-linux-zen.img
-options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rootflags=subvol=@ rw
+options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rootflags=subvol=@ rw zswap.enabled=0
 EOF
 ```
 
-Boot entry for **ext4**:
+For **ext4** boot entry remove `rootflags=subvol=@`:
+
+#### Enable Services and Reboot
 
 ```bash
-tee /boot/loader/entries/arch.conf > /dev/null << EOF
-title   Arch Linux (Zen)
-linux   /vmlinuz-linux-zen
-initrd  /amd-ucode.img
-initrd  /initramfs-linux-zen.img
-options root=UUID=$(blkid -s UUID -o value /dev/nvme0n1p2) rw
-EOF
-```
-
-#### NetworkManager
-
-```bash
-systemctl enable NetworkManager
-```
-
-#### Finish
-
-```bash
+systemctl enable NetworkManager.service
+systemctl enable systemd-timesyncd.service
 exit
 umount -R /mnt
 reboot
 ```
 
-## Part 2. Post-install
+## Part 2. Post-install Setup
 
-Log in as the new user. Start with these two steps.
+Log in as your newly created user. If using Wi-Fi, connect via `nmtui`.
 
-Connect to Wi-Fi (interactive; skip on Ethernet):
+### 2.1 Pacman and Mirrors
 
-```bash
-nmtui
-```
-
-### 2.1 Pacman and mirrors
-
-Enable `multilib` (needed for Steam and 32-bit libraries), colors and parallel downloads:
+Enable `multilib`, colored output, and parallel downloads:
 
 ```bash
 sudo sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /etc/pacman.conf
@@ -284,7 +291,7 @@ sudo sed -i 's/^#\?ParallelDownloads.*/ParallelDownloads = 10/' /etc/pacman.conf
 sudo sed -i 's/^#Color$/Color/' /etc/pacman.conf
 ```
 
-Pick fast mirrors first, then update. This way the big downloads that follow (desktop environment, NVIDIA) already use fast mirrors:
+Refresh mirrors for speed and update the system:
 
 ```bash
 sudo pacman -S --needed reflector && \
@@ -292,111 +299,110 @@ sudo reflector --protocol https --country Germany,Ukraine,Poland --age 6 --sort 
 sudo pacman -Syu
 ```
 
-### 2.2 GPU drivers
+### 2.2 GPU Drivers
 
-#### Common utilities (NVIDIA and AMD)
+#### Common Utilities (all GPUs)
 
 ```bash
 sudo pacman -S --needed \
-vulkan-icd-loader lib32-vulkan-icd-loader \
-libva libva-utils vulkan-tools mesa-utils \
-v4l-utils ffmpeg
+  vulkan-icd-loader lib32-vulkan-icd-loader \
+  libva libva-utils vulkan-tools mesa-utils v4l-utils
 ```
 
 #### NVIDIA (default)
 
-Use `nvidia-open` for the stock `linux` kernel and `nvidia-open-dkms` for `linux-zen` and other custom kernels. RTX 50-series cards work only with the open kernel modules.
+Use `nvidia-open` for the stock `linux` kernel, and `nvidia-open-dkms` for `linux-zen` or other custom kernels. RTX 50-series GPUs work exclusively with the open kernel modules.
 
 ```bash
 sudo pacman -S --needed \
-nvidia-open-dkms nvidia-utils lib32-nvidia-utils \
-nvidia-settings libva-nvidia-driver
+  nvidia-open-dkms nvidia-utils lib32-nvidia-utils \
+  nvidia-settings libva-nvidia-driver
 ```
 
-Optional: `opencl-nvidia` for OpenCL and `cuda` for CUDA development or ML (several GB):
+- **Optional (OpenCL / CUDA, requires several GB):**
+
+  ```bash
+  sudo pacman -S --needed opencl-nvidia cuda
+  ```
+
+- **Optional (Turing / RTX 20xx GPUs only):** Prevents `i2c_nvidia_gpu` USB-C controller errors during boot:
+
+  ```bash
+  sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null << 'EOF'
+  blacklist i2c_nvidia_gpu
+  EOF
+  ```
+
+> **NVIDIA Notes:**
+>
+> - Manually setting `nvidia_drm.modeset=1` or adding NVIDIA modules to `initramfs` is not required: `nvidia-utils` enables modeset by default, and early module loading breaks hibernation.
+> - With driver 595+ (open modules), `UseKernelSuspendNotifiers` handles VRAM preservation automatically during sleep, so `nvidia-suspend`, `nvidia-resume`, and `nvidia-hibernate` services should remain disabled.
+
+#### AMD / Intel (alternative)
 
 ```bash
-sudo pacman -S --needed opencl-nvidia cuda
+# AMD
+sudo pacman -S --needed mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
+
+# Intel
+sudo pacman -S --needed mesa lib32-mesa vulkan-intel lib32-vulkan-intel intel-media-driver
 ```
 
-Optional, Turing cards only (RTX 20xx): stop the `i2c_nvidia_gpu` USB-C controller driver from loading and printing errors:
+### 2.3 Desktop Environment (DE)
 
-```bash
-sudo tee /etc/modprobe.d/nvidia-i2c.conf > /dev/null << 'EOF'
-blacklist i2c_nvidia_gpu
-EOF
-```
-
-> `nvidia_drm modeset=1` and early loading of the NVIDIA modules in the initramfs are not needed: `nvidia-utils` enables modeset by default, and early loading breaks hibernation.
-> Verify after the first boot into the desktop, see [Quick checks](#quick-checks).
-> Sleep: with driver 595 or newer (open modules) the kernel suspend notifiers save video memory by themselves, so keep the `nvidia-suspend`, `nvidia-resume` and `nvidia-hibernate` services disabled (the package disables them). Enabling them is only needed with older drivers.
-
-#### AMD (alternative, or an AMD iGPU)
+#### Option A: KDE Plasma
 
 ```bash
 sudo pacman -S --needed \
-mesa lib32-mesa \
-vulkan-radeon lib32-vulkan-radeon
+  plasma-desktop plasma-login-manager \
+  plasma-nm plasma-pa powerdevil kscreen qt6-tools \
+  kde-gtk-config breeze-gtk xdg-desktop-portal-kde \
+  plasma-firewall tesseract-data-eng tesseract-data-ukr \
+  plasma-browser-integration plasma-systemmonitor \
+  kinfocenter kwallet kwallet-pam kwalletmanager && \
+sudo systemctl enable plasmalogin.service
 ```
 
-### 2.3 Desktop environment
+Essential KDE applications:
 
-#### GNOME
+```bash
+sudo pacman -S --needed \
+  konsole dolphin kio-admin spectacle gwenview \
+  vlc vlc-plugin-ffmpeg kate ark kalk
+```
+
+> **KWallet Setup:** After your first login to KDE, open `kwalletmanager` and create a wallet named `kdewallet` using **Blowfish** encryption (not GPG) and **the exact same password as your user login** so `kwallet-pam` unlocks it automatically.
+
+#### Option B: GNOME
 
 ```bash
 sudo pacman -S gnome && \
-sudo systemctl enable gdm && \
-sudo reboot
+sudo systemctl enable gdm.service
 ```
 
-#### Remove unneeded GNOME apps (optional)
+Remove unneeded default GNOME apps (optional):
 
 ```bash
 sudo pacman -Rns \
-gnome-calendar gnome-characters gnome-clocks \
-gnome-connections gnome-contacts gnome-music \
-gnome-font-viewer gnome-maps gnome-software \
-gnome-system-monitor gnome-tour gnome-weather \
-baobab epiphany simple-scan papers snapshot
+  gnome-calendar gnome-characters gnome-clocks \
+  gnome-connections gnome-contacts gnome-music \
+  gnome-font-viewer gnome-maps gnome-software \
+  gnome-system-monitor gnome-tour gnome-weather \
+  baobab epiphany simple-scan papers snapshot
 ```
 
-#### KDE Plasma
+### 2.4 Applications, Fonts, Audio, and Gaming
+
+#### Core Utilities and Applications
 
 ```bash
 sudo pacman -S --needed \
-plasma-desktop plasma-login-manager \
-plasma-nm plasma-pa powerdevil kscreen \
-kde-gtk-config breeze-gtk xdg-desktop-portal-kde \
-plasma-systemmonitor kinfocenter plasma-firewall \
-plasma-browser-integration \
-kwallet kwallet-pam kwalletmanager && \
-sudo systemctl enable plasmalogin && \
-sudo reboot
+  dosfstools ntfs-3g btop nvtop fastfetch ffmpeg \
+  git firefox telegram-desktop obs-studio luajit \
+  qbittorrent papirus-icon-theme bash-completion
 ```
 
-KDE apps (`plasma-desktop` does not include them):
-
-```bash
-sudo pacman -S --needed konsole dolphin kate ark spectacle gwenview okular
-```
-
-##### KWallet
-
-Needed by VS Code and other apps that store secrets. After the first login open `kwalletmanager` and create a wallet named `kdewallet` with **Blowfish** encryption (not GPG) and **the same password as your user login**. `kwallet-pam` unlocks it at login only if the passwords match.
-
-### 2.4 Programs
-
-#### Basic programs
-
-```bash
-sudo pacman -S --needed \
-git dosfstools ntfs-3g btop nvtop \
-firefox telegram-desktop fastfetch luajit \
-qbittorrent obs-studio papirus-icon-theme \
-bash-completion
-```
-
-GNOME only:
+GNOME-specific additions:
 
 ```bash
 sudo pacman -S --needed resources adw-gtk-theme gnome-browser-connector gnome-tweaks
@@ -406,20 +412,19 @@ sudo pacman -S --needed resources adw-gtk-theme gnome-browser-connector gnome-tw
 
 ```bash
 sudo pacman -S --needed \
-ttf-liberation ttf-roboto ttf-jetbrains-mono-nerd \
-noto-fonts noto-fonts-cjk noto-fonts-emoji
+  ttf-liberation ttf-roboto ttf-jetbrains-mono-nerd \
+  noto-fonts noto-fonts-cjk noto-fonts-emoji
 ```
 
-#### Sound and equalizer
+#### Audio and Equalizer (PipeWire + EasyEffects)
 
 ```bash
 sudo pacman -S --needed \
-pipewire pipewire-pulse pipewire-alsa \
-alsa-utils wireplumber easyeffects \
-lsp-plugins-lv2 calf
+  pipewire pipewire-pulse pipewire-alsa pipewire-jack \
+  alsa-utils wireplumber easyeffects lsp-plugins-lv2 calf
 ```
 
-DeepFilterNet noise suppression plugin:
+Optional — **DeepFilterNet** noise suppression LADSPA plugin:
 
 ```bash
 sudo mkdir -p /usr/lib/ladspa && \
@@ -429,61 +434,48 @@ sudo curl -L "https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6
 #### Gaming
 
 ```bash
-sudo pacman -S steam gamemode lib32-gamemode && \
+sudo pacman -S --needed steam gamemode lib32-gamemode && \
 sudo usermod -aG gamemode "$USER"
 ```
 
-### 2.5 System settings
+### 2.5 System Services and zram
 
-#### Firewall
+#### Firewall (`ufw`)
 
 ```bash
 sudo pacman -S --needed ufw && \
-sudo systemctl enable --now ufw && \
+sudo systemctl enable --now ufw.service && \
 sudo ufw default deny incoming && \
 sudo ufw default allow outgoing && \
-sudo ufw enable
+sudo ufw logging off && \
+sudo ufw --force enable
 ```
 
-Allow TCP traffic from the local network (replace `PORT`):
+Optional — allow local TCP traffic (replace `PORT`):
 
 ```bash
 sudo ufw allow from 192.168.0.0/24 to any port PORT proto tcp
 ```
 
-GUI: on GNOME install `gufw`, on KDE `plasma-firewall` is already installed (System Settings → Firewall).
-
-#### Power profiles
+#### Power Profiles, Bluetooth, DNS Cache, and Package Cleanup
 
 ```bash
+# Power profiles
 sudo pacman -S --needed power-profiles-daemon && \
-sudo systemctl enable --now power-profiles-daemon
-```
+sudo systemctl enable --now power-profiles-daemon.service
 
-#### Bluetooth
-
-```bash
-sudo pacman -S --needed bluez bluez-utils && \
+# Bluetooth (also install bluedevil on KDE)
+sudo pacman -S --needed bluez bluez-utils bluedevil && \
 sudo systemctl enable --now bluetooth.service
-```
 
-> KDE also needs the tray widget `bluedevil` and settings page:
-
-#### Local DNS cache (dnsmasq)
-
-```bash
+# Local DNS cache via dnsmasq
 sudo tee /etc/NetworkManager/conf.d/dns.conf > /dev/null << 'EOF'
 [main]
 dns=dnsmasq
 EOF
-sudo pacman -S --needed dnsmasq && nmcli general reload
-```
+sudo pacman -S --needed dnsmasq && sudo nmcli general reload
 
-#### Package cache cleanup
-
-`paccache` keeps the last 3 versions of every package and runs weekly:
-
-```bash
+# Weekly pacman cache cleanup (keeps the last 3 versions)
 sudo pacman -S --needed pacman-contrib && \
 sudo systemctl enable --now paccache.timer
 ```
@@ -492,89 +484,108 @@ sudo systemctl enable --now paccache.timer
 
 ```bash
 sudo pacman -S --needed zram-generator
-```
 
-```bash
 sudo tee /etc/systemd/zram-generator.conf > /dev/null << 'EOF'
 [zram0]
 zram-size = min(ram / 2, 8192)
 compression-algorithm = lz4
 swap-priority = 100
 EOF
-```
 
-Disable zswap, so that pages are not compressed twice (once by zswap, then again by zram). Append `zswap.enabled=0` to the `options` line of the boot entry.
-
-```bash
-sudo nano /boot/loader/entries/arch.conf
-```
-
-The line should end like this:
-
-```text
-options root=UUID=... rw zswap.enabled=0
-```
-
-> `min(ram / 2, 8192)` means half of the RAM, but at most 8 GiB. zram is compressed RAM, so a bigger device only matters under extreme memory pressure, and 8 GiB is plenty on 16 to 32 GB machines.
-> `lz4` is faster and uses less CPU than `zstd`, at the cost of a lower compression ratio. This is a good fit for gaming.
-
-Optional tuning for swap on zram (recommended by the Arch Wiki):
-
-```bash
 sudo tee /etc/sysctl.d/99-zram.conf > /dev/null << 'EOF'
 vm.swappiness=180
 vm.page-cluster=0
 EOF
 ```
 
-### 2.6 Shell: zsh
+> Verify that `zswap.enabled=0` is present in the `options` line of `/boot/loader/entries/arch.conf` so pages are not compressed twice.
 
-Packages:
+### 2.6 Shell: Zsh + Starship
+
+Install packages and generate the Starship preset (`gruvbox-rainbow`):
 
 ```bash
-sudo pacman -S --needed zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting
+sudo pacman -S --needed zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting starship
+mkdir -p ~/.config
+starship preset gruvbox-rainbow -o ~/.config/starship.toml
 ```
 
-Oh My Zsh, Powerlevel10k and the config (non-interactive; `RUNZSH=no CHSH=no` stop the installer from switching shells in the middle of the block):
+Configure `~/.zshrc` (with `terminfo`-based key bindings, plain prompt fallback for Linux TTY, and system plugins):
 
 ```bash
-RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
-sed -i 's#^ZSH_THEME=.*#if [ "$TERM" = "linux" ]; then\n  ZSH_THEME="robbyrussell"\nelse\n  ZSH_THEME="powerlevel10k/powerlevel10k"\nfi#' ~/.zshrc
-cat >> ~/.zshrc << 'EOF'
+cat > ~/.zshrc << 'EOF'
+# --- History ---
+HISTFILE=~/.zsh_history
+HISTSIZE=50000
+SAVEHIST=50000
+setopt HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE HIST_REDUCE_BLANKS SHARE_HISTORY
 
-# Plugins (zsh-syntax-highlighting must be sourced last)
-source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+# --- Options ---
+setopt AUTO_CD INTERACTIVE_COMMENTS
+
+# --- Completion ---
+autoload -Uz compinit && compinit
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# --- Key bindings (terminfo based) ---
+bindkey -e
+zmodload zsh/terminfo
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+
+typeset -gA key
+key=(
+  Home      "${terminfo[khome]}"
+  End       "${terminfo[kend]}"
+  Delete    "${terminfo[kdch1]}"
+  Up        "${terminfo[kcuu1]}"
+  Down      "${terminfo[kcud1]}"
+  CtrlLeft  "${terminfo[kLFT5]}"
+  CtrlRight "${terminfo[kRIT5]}"
+)
+[[ -n ${key[Home]} ]] && bindkey -- "${key[Home]}" beginning-of-line
+[[ -n ${key[End]} ]] && bindkey -- "${key[End]}" end-of-line
+[[ -n ${key[Delete]} ]] && bindkey -- "${key[Delete]}" delete-char
+[[ -n ${key[Up]} ]] && bindkey -- "${key[Up]}" up-line-or-beginning-search
+[[ -n ${key[Down]} ]] && bindkey -- "${key[Down]}" down-line-or-beginning-search
+[[ -n ${key[CtrlLeft]} ]] && bindkey -- "${key[CtrlLeft]}" backward-word
+[[ -n ${key[CtrlRight]} ]] && bindkey -- "${key[CtrlRight]}" forward-word
+
+if (( ${+terminfo[smkx]} && ${+terminfo[rmkx]} )); then
+  autoload -Uz add-zle-hook-widget
+  zle_application_mode_start() { echoti smkx }
+  zle_application_mode_stop() { echoti rmkx }
+  add-zle-hook-widget -Uz zle-line-init zle_application_mode_start
+  add-zle-hook-widget -Uz zle-line-finish zle_application_mode_stop
+fi
+
+# --- Prompt: plain prompt in Linux TTY, starship elsewhere ---
+if [[ $TERM == linux ]] || ! (( ${+commands[starship]} )); then
+  PROMPT='%F{green}%n@%m%f %F{yellow}%~%f %# '
+else
+  eval "$(starship init zsh)"
+fi
+
+# --- Plugins ---
+[[ -r /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]] \
+  && source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+[[ -r /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] \
+  && source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 EOF
 ```
 
-Nano syntax highlighting:
+Enable syntax highlighting in `nano` and set `zsh` as your login shell:
 
 ```bash
 echo 'include /usr/share/nano/*.nanorc' >> ~/.nanorc
+chsh -s /usr/bin/zsh
 ```
 
-Make zsh the login shell
+### 2.7 AUR (paru, pamac, WARP)
 
-```bash
-chsh -s /bin/zsh
-```
-
-Optional, a simpler prompt in the TTY. In `~/.zshrc`, replace the `if [ "$TERM" = "linux" ]; then ... fi` block with:
-
-```bash
-if [ "$TERM" = "linux" ]; then
-  ZSH_THEME=""
-  PROMPT="%F{green}%n@%m%f %F{yellow}%~%f $ "
-else
-  ZSH_THEME="powerlevel10k/powerlevel10k"
-fi
-```
-
-### 2.7 AUR
-
-#### paru and pamac
+#### Install `paru` and `pamac-aur`
 
 ```bash
 git clone https://aur.archlinux.org/paru.git /tmp/paru && \
@@ -582,9 +593,7 @@ cd /tmp/paru && \
 makepkg -si && \
 cd ~ && \
 rm -rf /tmp/paru
-```
 
-```bash
 paru -S pamac-aur
 ```
 
@@ -599,32 +608,25 @@ warp-cli connect && \
 systemctl --user mask warp-taskbar
 ```
 
-### 2.8 Desktop settings
+### 2.8 Final DE and Security Settings
 
-#### Regional formats
+#### Harden the Boot Menu (`systemd-boot`)
 
-English system language, with formats set separately (ISO dates and 24-hour time from `en_DK`, numbers, currency, units and paper size from `uk_UA`):
+Disable editing kernel parameters at boot after setup is complete:
 
 ```bash
-sudo tee /etc/locale.conf > /dev/null << 'EOF'
-LANG=en_US.UTF-8
-LC_TIME=en_DK.UTF-8
-LC_MONETARY=uk_UA.UTF-8
-LC_NUMERIC=uk_UA.UTF-8
-LC_MEASUREMENT=uk_UA.UTF-8
-LC_PAPER=uk_UA.UTF-8
-EOF
+echo 'editor no' | sudo tee -a /boot/loader/loader.conf > /dev/null
 ```
 
-#### GNOME
+#### GNOME Defaults and Extensions
 
-Volume step of the media keys:
+Set media key volume step to 2%:
 
 ```bash
 gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 ```
 
-Recommended extensions:
+Recommended GNOME extensions:
 
 - [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/)
 - [Blur My Shell](https://extensions.gnome.org/extension/3193/blur-my-shell/)
@@ -633,88 +635,66 @@ Recommended extensions:
 - [System Monitor](https://extensions.gnome.org/extension/6807/system-monitor/)
 - [Weather Effect](https://extensions.gnome.org/extension/8848/weather-effect/)
 
-## Optional
+## Optional Settings (Manual)
 
-### Weekly TRIM (ext4)
+### Weekly TRIM (ext4 only)
 
-Not needed on btrfs: modern kernels trim it asynchronously by themselves.
+Not needed on `btrfs` (modern kernels perform asynchronous TRIM automatically):
 
 ```bash
 sudo systemctl enable --now fstrim.timer
 ```
 
-### Snapper snapshots (btrfs)
+### Snapper Snapshots (btrfs)
 
-Requires the `@var_log` and `@pkg` subvolumes.
-
-```bash
-mount /dev/nvme0n1p2 /mnt
-btrfs subvolume create /mnt/@var_log
-btrfs subvolume create /mnt/@pkg
-umount /mnt
-```
+Requires the `@var_log` and `@pkg` subvolumes created during partitioning.
 
 ```bash
 sudo pacman -S --needed snapper snap-pac
-```
 
-Move the snapshots to a dedicated `@snapshots` subvolume:
-
-```bash
 sudo snapper -c root create-config /
 sudo btrfs subvolume delete /.snapshots
+
 sudo mkdir -p /mnt/btrfs-root
-sudo mount -o subvol=/ /dev/nvme0n1p2 /mnt/btrfs-root
+sudo mount -o subvolid=5 /dev/nvme0n1p2 /mnt/btrfs-root
 sudo btrfs subvolume create /mnt/btrfs-root/@snapshots
 sudo umount /mnt/btrfs-root
 sudo rmdir /mnt/btrfs-root
+
 sudo mkdir /.snapshots
 sudo mount -o noatime,compress=zstd:3,subvol=@snapshots /dev/nvme0n1p2 /.snapshots
 sudo chmod 750 /.snapshots
 sudo chown :wheel /.snapshots
-echo "UUID=$(sudo blkid -s UUID -o value /dev/nvme0n1p2) /.snapshots btrfs noatime,compress=zstd:3,subvol=@snapshots 0 0" | sudo tee -a /etc/fstab > /dev/null
-```
 
-Retention (5 hourly, 7 daily) and timers:
+echo "UUID=$(sudo blkid -s UUID -o value /dev/nvme0n1p2) /.snapshots btrfs noatime,compress=zstd:3,subvol=@snapshots 0 0" \
+  | sudo tee -a /etc/fstab > /dev/null
 
-```bash
 sudo snapper -c root set-config \
-"TIMELINE_CREATE=yes" "TIMELINE_CLEANUP=yes" \
-"TIMELINE_LIMIT_HOURLY=5" "TIMELINE_LIMIT_DAILY=7" \
-"TIMELINE_LIMIT_WEEKLY=0" "TIMELINE_LIMIT_MONTHLY=0" "TIMELINE_LIMIT_YEARLY=0"
+  "TIMELINE_CREATE=yes" "TIMELINE_CLEANUP=yes" \
+  "TIMELINE_LIMIT_HOURLY=5" "TIMELINE_LIMIT_DAILY=7" \
+  "TIMELINE_LIMIT_WEEKLY=0" "TIMELINE_LIMIT_MONTHLY=0" "TIMELINE_LIMIT_YEARLY=0"
+
 sudo systemctl enable --now snapper-timeline.timer snapper-cleanup.timer
 ```
 
-> With systemd-boot the kernel lives on the ESP and is **not** part of a snapshot. After a rollback the old `/usr/lib/modules` no longer matches the running kernel, so reboot into a matching kernel then reinstall `linux-zen` so that the kernel on the ESP matches the modules.
-> `genfstab` writes `subvolid=` into `/etc/fstab`. Remove it from the options if you plan to roll back snapshots.
+> **After a snapshot rollback:** The kernel resides on the ESP (`/boot`) and is not included in Btrfs snapshots. If `/usr/lib/modules` in the rolled-back snapshot does not match the kernel on the ESP, boot from a matching kernel or Live ISO and reinstall the kernel package (`sudo pacman -S linux-zen`).
 
-### Swapfile
+### Swapfile (for hibernation)
 
-Not needed with 16 GB or more and zram. It is only useful for hibernation, which also requires the `resume` hook and `resume_offset`, and these are not configured in this guide.
-
-ext4:
+Not needed with 16+ GB RAM and `zram` unless you plan to use hibernation (which also requires the `resume` hook and `resume_offset`).
 
 ```bash
-sudo fallocate -l 8G /swapfile && \
-sudo chmod 600 /swapfile && \
-sudo mkswap /swapfile && \
-sudo swapon /swapfile
-```
+# For ext4
+sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 
-btrfs (creates a swapfile without compression and copy-on-write). With Snapper keep it in its own subvolume, because a subvolume with an active swapfile cannot be snapshotted:
+# For btrfs (create in a dedicated subvolume without snapshots)
+sudo btrfs filesystem mkswapfile --size 8g /swapfile && sudo swapon /swapfile
 
-```bash
-sudo btrfs filesystem mkswapfile --size 8g /swapfile && \
-sudo swapon /swapfile
-```
-
-Add it to `fstab`:
-
-```bash
+# Add to fstab
 echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab > /dev/null
 ```
 
-Swap tuning, **without** zram only:
+Swap tuning (**without** zram only):
 
 ```bash
 sudo tee /etc/sysctl.d/99-sysctl.conf > /dev/null << 'EOF'
@@ -723,56 +703,48 @@ vm.vfs_cache_pressure=50
 EOF
 ```
 
-### Secure Boot (sbctl)
+### Secure Boot (`sbctl`)
 
-For systemd-boot with a signed kernel (no UKI). Windows keeps booting, because the Microsoft keys stay enrolled.
+For `systemd-boot` with a signed kernel (Microsoft keys remain enrolled so Windows continues to boot).
 
-> Dual boot with Windows: if BitLocker or device encryption is on, changing the Secure Boot keys asks for the recovery key on the next Windows boot. Check in an administrator PowerShell: `manage-bde -status`.
+1. Put your firmware into **Setup Mode** in UEFI settings (set Secure Boot mode to `Custom` and clear existing keys).
 
-Install:
+2. Install `sbctl`, generate keys, and enroll them alongside Microsoft's keys:
 
-```bash
-sudo pacman -S --needed sbctl
-```
+   ```bash
+   sudo pacman -S --needed sbctl
+   sbctl status
+   sudo sbctl create-keys
+   sudo sbctl enroll-keys -m
+   ```
 
-Put the firmware into Setup Mode. In the UEFI setup open Secure Boot, set the mode to `Custom` and clear the keys (the names differ between vendors). Then check that `Setup Mode` is `Enabled`:
+3. Sign the kernel and bootloader binaries (`-s` saves paths to the `sbctl` database so the pacman hook automatically re-signs them after updates):
 
-```bash
-sbctl status
-```
+   ```bash
+   sudo sbctl sign -s /boot/vmlinuz-linux-zen
+   sudo sbctl sign -s /boot/EFI/systemd/systemd-bootx64.efi
+   sudo sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+   sudo sbctl sign -s -o /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+   ```
 
-Create the keys and enroll them together with the Microsoft keys (`-m`):
+4. Verify signatures:
 
-```bash
-sudo sbctl create-keys
-sudo sbctl enroll-keys -m
-```
+   ```bash
+   sudo sbctl verify 2>&1 | grep -E "vmlinuz|systemd-boot|BOOTX64"
+   ```
 
-Sign the kernel and the boot loader. `-s` saves the file in the sbctl database, so the pacman hook signs it again after every update:
+## Quick System Checks
 
-```bash
-sudo sbctl sign -s /boot/vmlinuz-linux-zen
-sudo sbctl sign -s /boot/EFI/systemd/systemd-bootx64.efi
-sudo sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
-sudo sbctl sign -s -o /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi
-```
+You can run `./arch-setup.sh check` or verify each component manually:
 
-Check (the Windows files on the shared ESP are listed as not signed, ignore them):
-
-```bash
-sudo sbctl verify 2>&1 | grep -E "vmlinuz|systemd-boot|BOOTX64"
-```
-
-## Quick checks
-
-| What | Command | Expected |
+| Check | Command | Expected Output |
 | --- | --- | --- |
-| NVIDIA params | `sudo cat /proc/driver/nvidia/params` | Configurations related to NVIDIA |
-| NVIDIA DRM modeset | `cat /sys/module/nvidia_drm/parameters/modeset` | `Y` |
-| NVIDIA suspend path | `sudo cat /proc/driver/nvidia/params \| grep UseKernelSuspendNotifiers` | `UseKernelSuspendNotifiers: 1` |
-| Active swap (zram) | `swapon --show` | `/dev/zram0` |
-| zswap is not doubling zram | `cat /sys/module/zswap/parameters/enabled` | `N`. If `Y`, add `zswap.enabled=0` to the kernel options (`options` in `arch.conf`, or `GRUB_CMDLINE_LINUX_DEFAULT`) |
-| Bootloader | `bootctl status` | systemd-boot is installed, Windows entry is listed |
-| Filesystem | `findmnt -no OPTIONS /` | `compress=zstd:3` and `subvol=/@` (btrfs) |
-| Time sync | `timedatectl` | `System clock synchronized: yes` |
-| KWallet (KDE) | `qdbus6 org.kde.kwalletd6 /modules/kwalletd6 org.kde.KWallet.isOpen kdewallet` | `true` |
+| **NVIDIA params** | `sudo cat /proc/driver/nvidia/params` | Readable NVIDIA driver parameters |
+| **NVIDIA DRM modeset** | `cat /sys/module/nvidia_drm/parameters/modeset` | `Y` |
+| **NVIDIA suspend** | `sudo cat /proc/driver/nvidia/params \| grep UseKernelSuspendNotifiers` | `UseKernelSuspendNotifiers: 1` |
+| **Active swap (zram)** | `swapon --show` | `/dev/zram0` active |
+| **zswap disabled** | `cat /sys/module/zswap/parameters/enabled` | `N` |
+| **Bootloader** | `bootctl status` | `systemd-boot` installed, Windows entry listed (if installed) |
+| **Filesystem** | `findmnt -no OPTIONS /` | Includes `compress=zstd:3` and `subvol=/@` (for btrfs) |
+| **Time sync** | `timedatectl` | `System clock synchronized: yes` |
+| **KWallet (KDE)** | `qdbus6 org.kde.kwalletd6 /modules/kwalletd6 org.kde.KWallet.isOpen kdewallet` | `true` |

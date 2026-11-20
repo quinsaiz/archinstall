@@ -5,7 +5,7 @@
 #   ./arch-setup.sh           auto: "install" on the live ISO, "post" otherwise
 #   ./arch-setup.sh install   base system, run as root from the live ISO
 #   ./arch-setup.sh post      drivers, desktop, apps; run as your user after first boot
-#   ./arch-setup.sh kde       KDE defaults (run inside the Plasma session)
+#   ./arch-setup.sh shell     configure shell (run inside the user session)
 #   ./arch-setup.sh check     verify the finished system (run after the final reboot)
 #
 # Partitioning (cfdisk), Wi-Fi on the ISO, i2c fix are intentionally manual.
@@ -63,7 +63,7 @@ GNOME_REMOVE=(
 
 BASIC_PKGS=(
   dosfstools ntfs-3g btop nvtop fastfetch ffmpeg
-  git firefox telegram-desktop obs-studio luajit 
+  git firefox telegram-desktop obs-studio luajit
   qbittorrent papirus-icon-theme bash-completion
 )
 
@@ -377,7 +377,7 @@ setup_ext4() {
 format_and_mount() {
   info "Formatting and mounting"
   if [[ $FORMAT_ESP == yes ]]; then
-    mkfs.vfat -F32 -n efi "$ESP_PART"
+    mkfs.vfat -F32 -n EFI "$ESP_PART"
   fi
   case $FS in
     btrfs) setup_btrfs ;;
@@ -768,31 +768,81 @@ EOF
 }
 
 step_shell() {
-  info "Shell: zsh"
-  pac zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting
+  info "Shell: zsh + starship"
+  pac zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting starship
 
-  local tmp custom=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
-  if [[ ! -d $HOME/.oh-my-zsh ]]; then
-    tmp=$(mktemp)
-    curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o "$tmp"
-    RUNZSH=no CHSH=no sh "$tmp"
-    rm -f "$tmp"
-  fi
-  if [[ ! -d $custom/themes/powerlevel10k ]]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$custom/themes/powerlevel10k"
+  mkdir -p "$HOME/.config"
+  if [[ ! -f $HOME/.config/starship.toml ]]; then
+    starship preset gruvbox-rainbow -o "$HOME/.config/starship.toml"
   fi
 
-  if ! grep -q 'powerlevel10k' "$HOME/.zshrc"; then
-    # shellcheck disable=SC2016
-    sed -i 's#^ZSH_THEME=.*#if [ "$TERM" = "linux" ]; then\n  ZSH_THEME="robbyrussell"\nelse\n  ZSH_THEME="powerlevel10k/powerlevel10k"\nfi#' "$HOME/.zshrc"
-    grep -q 'powerlevel10k' "$HOME/.zshrc" || die "Could not set ZSH_THEME in ~/.zshrc"
-  fi
-  if ! grep -q '^# arch-setup plugins' "$HOME/.zshrc"; then
-    cat >> "$HOME/.zshrc" << 'EOF'
+  if ! grep -q '^# arch-setup zsh' "$HOME/.zshrc" 2> /dev/null; then
+    if [[ -f $HOME/.zshrc ]]; then
+      mv "$HOME/.zshrc" "$HOME/.zshrc.bak.$(date +%s)"
+    fi
+    cat > "$HOME/.zshrc" << 'EOF'
+# arch-setup zsh
 
-# arch-setup plugins (zsh-syntax-highlighting must be sourced last)
-source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+# --- History ---
+HISTFILE=~/.zsh_history
+HISTSIZE=50000
+SAVEHIST=50000
+setopt HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE HIST_REDUCE_BLANKS SHARE_HISTORY
+
+# --- Options ---
+setopt AUTO_CD INTERACTIVE_COMMENTS
+
+# --- Completion ---
+autoload -Uz compinit && compinit
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# --- Key bindings (terminfo based, as on the Arch wiki "Zsh" page) ---
+bindkey -e
+zmodload zsh/terminfo
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+
+typeset -gA key
+key=(
+  Home      "${terminfo[khome]}"
+  End       "${terminfo[kend]}"
+  Delete    "${terminfo[kdch1]}"
+  Up        "${terminfo[kcuu1]}"
+  Down      "${terminfo[kcud1]}"
+  CtrlLeft  "${terminfo[kLFT5]}"
+  CtrlRight "${terminfo[kRIT5]}"
+)
+[[ -n ${key[Home]} ]] && bindkey -- "${key[Home]}" beginning-of-line
+[[ -n ${key[End]} ]] && bindkey -- "${key[End]}" end-of-line
+[[ -n ${key[Delete]} ]] && bindkey -- "${key[Delete]}" delete-char
+[[ -n ${key[Up]} ]] && bindkey -- "${key[Up]}" up-line-or-beginning-search
+[[ -n ${key[Down]} ]] && bindkey -- "${key[Down]}" down-line-or-beginning-search
+[[ -n ${key[CtrlLeft]} ]] && bindkey -- "${key[CtrlLeft]}" backward-word
+[[ -n ${key[CtrlRight]} ]] && bindkey -- "${key[CtrlRight]}" forward-word
+
+# Keys from terminfo are only valid while the terminal is in "application mode".
+if (( ${+terminfo[smkx]} && ${+terminfo[rmkx]} )); then
+  autoload -Uz add-zle-hook-widget
+  zle_application_mode_start() { echoti smkx }
+  zle_application_mode_stop() { echoti rmkx }
+  add-zle-hook-widget -Uz zle-line-init zle_application_mode_start
+  add-zle-hook-widget -Uz zle-line-finish zle_application_mode_stop
+fi
+
+# --- Prompt: starship needs a Nerd Font, so the Linux console gets a plain prompt ---
+if [[ $TERM == linux ]] || ! (( ${+commands[starship]} )); then
+  PROMPT='%F{green}%n@%m%f %F{yellow}%~%f %# '
+else
+  eval "$(starship init zsh)"
+fi
+
+# --- Plugins (pacman packages) ---
+[[ -r /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]] \
+  && source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+[[ -r /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] \
+  && source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 EOF
   fi
 
@@ -878,155 +928,6 @@ EOF
     echo "KDE: create the 'kdewallet' wallet (Blowfish, same password as your login) in kwalletmanager."
   fi
   if ask_yn "Reboot now?" y; then sudo reboot; fi
-}
-
-# --------------------------------------------------------------------------- #
-# Stage 2b: KDE additional configuration (internal)
-# --------------------------------------------------------------------------- #
-
-kw() {
-  local file=$1
-  shift
-  kwriteconfig6 --file "$file" "$@"
-}
-
-kwn() {
-  local file=$1
-  shift
-  kwriteconfig6 --notify --file "$file" "$@"
-}
-
-kde_pointer_devices() {
-  local ev dev props kind name vendor product
-  for ev in /sys/class/input/event*; do
-    dev=$ev/device
-    [[ -r $dev/name && -r $dev/id/vendor && -r $dev/id/product ]] || continue
-    props=$(udevadm info -q property -p "$ev")
-    kind=''
-    if grep -q '^ID_INPUT_TOUCHPAD=1$' <<< "$props"; then
-      kind=touchpad
-    elif grep -q '^ID_INPUT_MOUSE=1$' <<< "$props"; then
-      kind=mouse
-    fi
-    [[ -n $kind ]] || continue
-    name=$(< "$dev/name")
-    vendor=$(< "$dev/id/vendor")
-    product=$(< "$dev/id/product")
-    printf '%d\t%d\t%s\t%s\n' "$((16#$vendor))" "$((16#$product))" "$name" "$kind"
-  done | sort -u
-}
-
-step_kde_input() {
-  info "Pointer devices: natural scroll"
-  local vid pid name kind found=0
-  while IFS=$'\t' read -r vid pid name kind; do
-    found=1
-    kwn kcminputrc --group Libinput --group "$vid" --group "$pid" --group "$name" \
-      --key NaturalScroll --type bool true
-    if [[ $kind == touchpad ]]; then
-      kwn kcminputrc --group Libinput --group "$vid" --group "$pid" --group "$name" \
-        --key TapToClick --type bool true
-    fi
-    ok "$name ($kind)"
-  done < <(kde_pointer_devices)
-  ((found)) || warn "No mouse or touchpad found."
-}
-
-step_kde_keyboard() {
-  info "Keyboard layouts: EN + UA, switch with Alt+Space"
-  kwn kxkbrc --group Layout --key Use --type bool true
-  kwn kxkbrc --group Layout --key LayoutList "us,ua"
-  kwn kxkbrc --group Layout --key VariantList ","
-  kwn kxkbrc --group Layout --key Options "grp:alt_space_toggle"
-  kwn kxkbrc --group Layout --key ResetOldOptions --type bool true
-}
-
-step_kde_shortcuts() {
-  info "Shortcuts"
-  local tab=$'\t' rc=kglobalshortcutsrc
-
-  kbuildsycoca6 > /dev/null 2>&1 || true
-
-  kw "$rc" --group services --group org.kde.dolphin.desktop --key _launch "Alt+E"
-  kw "$rc" --group services --group org.kde.konsole.desktop --key _launch "Alt+Return"
-  kw "$rc" --group services --group org.kde.krunner.desktop --key _launch "Search${tab}Alt+F2"
-  kw "$rc" --group services --group org.kde.plasma-systemmonitor.desktop --key _launch "Ctrl+Shift+Esc"
-  kw "$rc" --group services --group systemsettings.desktop --key _launch "Tools${tab}Alt+I"
-
-  kw "$rc" --group org_kde_powerdevil --key powerProfile \
-    "Battery${tab}Alt+B,Battery${tab}Meta+B,Switch Power Profile"
-}
-
-step_kde_desktop() {
-  info "Desktop behaviour"
-  kwn kwinrc --group Effect-overview --key BorderActivate 9
-  kwn kwinrc --group Plugins --key shakecursorEnabled --type bool false
-  qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect shakecursor || true
-  kw ksmserverrc --group General --key loginMode emptySession
-  kwn kcminputrc --group Keyboard --key NumLock 2
-}
-
-step_kde_baloo() {
-  info "Baloo: filenames only, no hidden folders"
-  local basic
-  basic=$(kreadconfig6 --file baloofilerc --group General --key "only basic indexing")
-  kw baloofilerc --group General --key "only basic indexing" --type bool true
-  kw baloofilerc --group General --key "index hidden folders" --type bool false
-  if [[ $basic != true ]]; then
-    balooctl6 disable || true
-    balooctl6 purge || true
-    balooctl6 enable || true
-  fi
-}
-
-step_kde_look() {
-  info "Look: Breeze Dark, Papirus-Dark, Breeze_Light cursor"
-  local current
-  current=$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage)
-  if [[ $current != org.kde.breezedark.desktop ]]; then
-    plasma-apply-lookandfeel -a org.kde.breezedark.desktop
-  fi
-  kwn kdeglobals --group Icons --key Theme Papirus-Dark
-  plasma-apply-cursortheme Breeze_Light || warn "Cursor theme Breeze_Light was not applied."
-  kwn kdeglobals --group KDE --key AnimationDurationFactor 0.75
-}
-
-step_kde_konsole() {
-  info "Konsole: Nerd Font profile"
-  if ! grep -q '^JetBrainsMono Nerd Font Mono' < <(fc-list : family); then
-    warn "JetBrainsMono Nerd Font Mono is not installed, Konsole profile skipped."
-    return 0
-  fi
-  local dir=$HOME/.local/share/konsole
-  local profile=$dir/Arch.profile
-  mkdir -p "$dir"
-  kw "$profile" --group General --key Name Arch
-  kw "$profile" --group General --key Parent "FALLBACK/"
-  kw "$profile" --group Appearance --key Font "JetBrainsMono Nerd Font Mono,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
-  kw konsolerc --group "Desktop Entry" --key DefaultProfile "Arch.profile"
-}
-
-cmd_kde() {
-  ((EUID != 0)) || die "Run the kde stage as your regular user, not root."
-  [[ ${XDG_CURRENT_DESKTOP:-} == *KDE* ]] \
-    || die "Run this stage inside the KDE Plasma session (open Konsole in Plasma)."
-  command -v kwriteconfig6 > /dev/null || die "kwriteconfig6 not found: is Plasma installed?"
-  sudo -v
-
-  step_kde_input
-  step_kde_keyboard
-  step_kde_shortcuts
-  step_kde_desktop
-  step_kde_baloo
-  step_kde_look
-  step_kde_konsole
-  qdbus6 org.kde.KWin /KWin reconfigure || true
-
-  cat << EOF
-
-${C_GREEN}${C_BOLD}KDE defaults applied.${C_OFF}
-Log out and back in: shortcuts, layouts and the Meta key are only picked up on the next login.
-EOF
 }
 
 # --------------------------------------------------------------------------- #
@@ -1246,7 +1147,7 @@ main() {
     install) cmd_install ;;
     chroot) cmd_chroot ;;
     post) cmd_post ;;
-    kde) cmd_kde ;;
+    shell) step_shell ;;
     check) cmd_check ;;
     -h | --help | help) usage ;;
     *)
